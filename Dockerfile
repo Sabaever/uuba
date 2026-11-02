@@ -1043,6 +1043,647 @@ assert Path('case-review.html').exists()
 
 print('Uúba Personal Case Review update passed')
 PY
+# ---------------------------------------------------------------
+# UÚBA CASE REVIEW INTAKE PIPELINE
+# Customer request -> PostgreSQL intake -> Caseworker admin queue
+# ---------------------------------------------------------------
+
+RUN python - <<'PY'
+from pathlib import Path
+
+APP_MARKER = "# UÚBA CASE REVIEW INTAKE API v1"
+
+APP_CODE = r"""
+# UÚBA CASE REVIEW INTAKE API v1
+import os as _uuba_os
+import re as _uuba_re
+import secrets as _uuba_secrets
+from datetime import datetime as _uuba_datetime, timezone as _uuba_timezone
+from fastapi import Request as _UubaRequest, HTTPException as _UubaHTTPException
+from sqlalchemy import create_engine as _uuba_create_engine, text as _uuba_text
+
+_uuba_db_url = _uuba_os.getenv("DATABASE_URL", "").strip()
+if _uuba_db_url.startswith("postgres://"):
+    _uuba_db_url = "postgresql://" + _uuba_db_url[len("postgres://"):]
+_uuba_intake_engine = _uuba_create_engine(_uuba_db_url, pool_pre_ping=True) if _uuba_db_url else None
+
+_UUBA_INTAKE_STATUSES = {
+    "new", "triage", "awaiting_information", "scoped", "quoted",
+    "accepted", "in_review", "qa", "completed", "declined"
+}
+
+def _uuba_intake_init():
+    if _uuba_intake_engine is None:
+        raise _UubaHTTPException(status_code=503, detail="Case review storage is not configured")
+    ddl = """
+    CREATE TABLE IF NOT EXISTS uuba_case_intake (
+        id BIGSERIAL PRIMARY KEY,
+        reference VARCHAR(32) UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        customer_name VARCHAR(200) NOT NULL,
+        email VARCHAR(320) NOT NULL,
+        phone VARCHAR(80),
+        category VARCHAR(120) NOT NULL,
+        trader_name VARCHAR(240),
+        amount_in_dispute VARCHAR(120),
+        deadline VARCHAR(120),
+        summary TEXT NOT NULL,
+        desired_outcome TEXT,
+        evidence_notes TEXT,
+        has_documents BOOLEAN NOT NULL DEFAULT FALSE,
+        privacy_consent BOOLEAN NOT NULL DEFAULT FALSE,
+        status VARCHAR(40) NOT NULL DEFAULT 'new',
+        scope_level VARCHAR(60),
+        quote_amount NUMERIC(10,2),
+        quote_notes TEXT,
+        internal_notes TEXT,
+        assigned_to VARCHAR(160),
+        reviewed_at TIMESTAMPTZ,
+        closed_at TIMESTAMPTZ
+    )
+    """
+    with _uuba_intake_engine.begin() as conn:
+        conn.execute(_uuba_text(ddl))
+        conn.execute(_uuba_text("CREATE INDEX IF NOT EXISTS idx_uuba_case_intake_status ON uuba_case_intake(status)"))
+        conn.execute(_uuba_text("CREATE INDEX IF NOT EXISTS idx_uuba_case_intake_created ON uuba_case_intake(created_at DESC)"))
+
+def _uuba_admin_guard(request: _UubaRequest):
+    expected = _uuba_os.getenv("UUBA_ADMIN_TOKEN", "")
+    auth = request.headers.get("authorization", "")
+    supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not expected or not _uuba_secrets.compare_digest(supplied, expected):
+        raise _UubaHTTPException(status_code=401, detail="Admin access was not accepted")
+
+def _uuba_clean(value, limit=4000):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:limit] if value else None
+
+def _uuba_row(row):
+    d = dict(row._mapping)
+    for k, v in list(d.items()):
+        if hasattr(v, "isoformat"):
+            d[k] = v.isoformat()
+        elif k == "quote_amount" and v is not None:
+            d[k] = float(v)
+    return d
+
+@app.post("/api/case-review/intake")
+async def uuba_case_review_intake(request: _UubaRequest):
+    _uuba_intake_init()
+    try:
+        data = await request.json()
+    except Exception:
+        raise _UubaHTTPException(status_code=400, detail="Invalid request")
+
+    if _uuba_clean(data.get("website"), 200):
+        return {"ok": True, "reference": "UUBA-REVIEW"}
+
+    name = _uuba_clean(data.get("name"), 200)
+    email = _uuba_clean(data.get("email"), 320)
+    category = _uuba_clean(data.get("category"), 120)
+    summary = _uuba_clean(data.get("summary"), 8000)
+    consent = bool(data.get("privacy_consent"))
+
+    if not name or not email or not category or not summary:
+        raise _UubaHTTPException(status_code=400, detail="Name, email, category and case summary are required")
+    if not _uuba_re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise _UubaHTTPException(status_code=400, detail="Enter a valid email address")
+    if len(summary) < 40:
+        raise _UubaHTTPException(status_code=400, detail="Please provide a little more detail about the dispute")
+    if not consent:
+        raise _UubaHTTPException(status_code=400, detail="You must confirm the review-request terms")
+
+    ref = "UUBA-CR-" + _uuba_datetime.now(_uuba_timezone.utc).strftime("%Y%m%d") + "-" + _uuba_secrets.token_hex(3).upper()
+
+    sql = _uuba_text("""
+        INSERT INTO uuba_case_intake
+        (reference, customer_name, email, phone, category, trader_name,
+         amount_in_dispute, deadline, summary, desired_outcome, evidence_notes,
+         has_documents, privacy_consent, status)
+        VALUES
+        (:reference, :customer_name, :email, :phone, :category, :trader_name,
+         :amount_in_dispute, :deadline, :summary, :desired_outcome, :evidence_notes,
+         :has_documents, :privacy_consent, 'new')
+        RETURNING reference, created_at
+    """)
+
+    params = {
+        "reference": ref,
+        "customer_name": name,
+        "email": email.lower(),
+        "phone": _uuba_clean(data.get("phone"), 80),
+        "category": category,
+        "trader_name": _uuba_clean(data.get("trader_name"), 240),
+        "amount_in_dispute": _uuba_clean(data.get("amount_in_dispute"), 120),
+        "deadline": _uuba_clean(data.get("deadline"), 120),
+        "summary": summary,
+        "desired_outcome": _uuba_clean(data.get("desired_outcome"), 5000),
+        "evidence_notes": _uuba_clean(data.get("evidence_notes"), 5000),
+        "has_documents": bool(data.get("has_documents")),
+        "privacy_consent": True,
+    }
+
+    with _uuba_intake_engine.begin() as conn:
+        row = conn.execute(sql, params).first()
+
+    return {
+        "ok": True,
+        "reference": row.reference,
+        "message": "Your request has been received for initial scope assessment. Uúba has not accepted the case or started substantive work at this stage."
+    }
+
+@app.get("/api/admin/case-intake")
+def uuba_admin_case_intake(request: _UubaRequest, status: str = "", limit: int = 100):
+    _uuba_admin_guard(request)
+    _uuba_intake_init()
+    limit = max(1, min(limit, 250))
+    params = {"limit": limit}
+    where = ""
+    if status and status in _UUBA_INTAKE_STATUSES:
+        where = " WHERE status = :status"
+        params["status"] = status
+    sql = _uuba_text("SELECT * FROM uuba_case_intake" + where + " ORDER BY created_at DESC LIMIT :limit")
+    with _uuba_intake_engine.begin() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return {"items": [_uuba_row(r) for r in rows], "count": len(rows)}
+
+@app.get("/api/admin/case-intake/summary")
+def uuba_admin_case_intake_summary(request: _UubaRequest):
+    _uuba_admin_guard(request)
+    _uuba_intake_init()
+    with _uuba_intake_engine.begin() as conn:
+        rows = conn.execute(_uuba_text("SELECT status, COUNT(*) AS n FROM uuba_case_intake GROUP BY status")).fetchall()
+    counts = {r.status: int(r.n) for r in rows}
+    return {
+        "new_requests": counts.get("new", 0),
+        "triage": counts.get("triage", 0),
+        "awaiting_information": counts.get("awaiting_information", 0),
+        "quoted": counts.get("quoted", 0),
+        "accepted": counts.get("accepted", 0),
+        "in_review": counts.get("in_review", 0),
+        "qa": counts.get("qa", 0),
+        "completed": counts.get("completed", 0),
+        "declined": counts.get("declined", 0),
+    }
+
+@app.get("/api/admin/case-intake/{reference}")
+def uuba_admin_case_intake_detail(reference: str, request: _UubaRequest):
+    _uuba_admin_guard(request)
+    _uuba_intake_init()
+    with _uuba_intake_engine.begin() as conn:
+        row = conn.execute(_uuba_text("SELECT * FROM uuba_case_intake WHERE reference=:reference"), {"reference": reference}).first()
+    if not row:
+        raise _UubaHTTPException(status_code=404, detail="Case request not found")
+    return _uuba_row(row)
+
+@app.patch("/api/admin/case-intake/{reference}")
+async def uuba_admin_case_intake_update(reference: str, request: _UubaRequest):
+    _uuba_admin_guard(request)
+    _uuba_intake_init()
+    try:
+        data = await request.json()
+    except Exception:
+        raise _UubaHTTPException(status_code=400, detail="Invalid request")
+
+    allowed = {"status", "scope_level", "quote_amount", "quote_notes", "internal_notes", "assigned_to"}
+    updates = []
+    params = {"reference": reference}
+
+    for key in allowed:
+        if key not in data:
+            continue
+        value = data.get(key)
+        if key == "status":
+            if value not in _UUBA_INTAKE_STATUSES:
+                raise _UubaHTTPException(status_code=400, detail="Invalid status")
+        elif key == "quote_amount":
+            if value in ("", None):
+                value = None
+            else:
+                try:
+                    value = round(float(value), 2)
+                except Exception:
+                    raise _UubaHTTPException(status_code=400, detail="Quote must be a number")
+                if value < 0 or value > 100000:
+                    raise _UubaHTTPException(status_code=400, detail="Quote is outside the permitted range")
+        else:
+            value = _uuba_clean(value, 10000)
+
+        params[key] = value
+        updates.append(f"{key}=:{key}")
+
+    if not updates:
+        raise _UubaHTTPException(status_code=400, detail="No changes supplied")
+
+    updates.append("updated_at=NOW()")
+    if data.get("status") in {"triage", "scoped", "quoted", "accepted", "in_review", "qa", "completed", "declined"}:
+        updates.append("reviewed_at=COALESCE(reviewed_at, NOW())")
+    if data.get("status") in {"completed", "declined"}:
+        updates.append("closed_at=NOW()")
+    elif "status" in data:
+        updates.append("closed_at=NULL")
+
+    sql = _uuba_text("UPDATE uuba_case_intake SET " + ", ".join(updates) + " WHERE reference=:reference RETURNING *")
+    with _uuba_intake_engine.begin() as conn:
+        row = conn.execute(sql, params).first()
+
+    if not row:
+        raise _UubaHTTPException(status_code=404, detail="Case request not found")
+    return _uuba_row(row)
+"""
+
+p = Path("app.py")
+s = p.read_text(encoding="utf-8")
+if APP_MARKER not in s:
+    s += APP_CODE
+    p.write_text(s, encoding="utf-8")
+
+FORM = r"""
+<section id="uuba-review-request" style="margin:34px auto;max-width:900px;background:#fff;border:1px solid #d7e0e8;border-radius:18px;padding:26px">
+  <div style="font-size:13px;font-weight:800;color:#117f78;letter-spacing:.04em">INITIAL SCOPE ASSESSMENT</div>
+  <h2 style="margin:8px 0 10px">Request a Personal Case Review</h2>
+  <p style="color:#586b7d;line-height:1.55">Tell us enough to assess whether Uúba can help. This is an initial scope request only. We will confirm availability, scope and price before any substantive review begins.</p>
+
+  <form id="uubaCaseReviewForm">
+    <div class="uuba-intake-grid">
+      <label>Full name<input name="name" required maxlength="200"></label>
+      <label>Email<input name="email" type="email" required maxlength="320"></label>
+      <label>Phone (optional)<input name="phone" maxlength="80"></label>
+
+      <label>Dispute category
+        <select name="category" required>
+          <option value="">Choose…</option>
+          <option>Car dealer / vehicle</option>
+          <option>New build / housing</option>
+          <option>Phone / broadband / pay TV</option>
+          <option>Retail / consumer goods</option>
+          <option>Trades / home services</option>
+          <option>Energy</option>
+          <option>Travel</option>
+          <option>Other consumer dispute</option>
+        </select>
+      </label>
+
+      <label>Business / trader involved<input name="trader_name" maxlength="240"></label>
+      <label>Amount in dispute (optional)<input name="amount_in_dispute" maxlength="120" placeholder="e.g. £2,500"></label>
+      <label>Important deadline (optional)<input name="deadline" maxlength="120" placeholder="e.g. ombudsman deadline 20 Nov"></label>
+    </div>
+
+    <label>What has happened?
+      <textarea name="summary" required minlength="40" maxlength="8000" rows="7" placeholder="Give a concise chronology, what has gone wrong, and where the matter currently stands."></textarea>
+    </label>
+
+    <label>What outcome are you seeking?
+      <textarea name="desired_outcome" maxlength="5000" rows="4"></textarea>
+    </label>
+
+    <label>What evidence do you currently have?
+      <textarea name="evidence_notes" maxlength="5000" rows="4" placeholder="For example: contract, emails, photographs, reports, invoices, complaint responses."></textarea>
+    </label>
+
+    <label class="uuba-check"><input type="checkbox" name="has_documents"> I have documents/evidence available if Uúba requests them.</label>
+
+    <p class="uuba-intake-note"><strong>Please do not send sensitive documents at this stage.</strong> If Uúba accepts the review, we will tell you what evidence is needed.</p>
+
+    <label class="uuba-check"><input type="checkbox" name="privacy_consent" required> I understand this submission is a request for an initial scope assessment only. It does not mean Uúba has accepted my case or started substantive work, and any price will be confirmed before substantive work begins.</label>
+
+    <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+
+    <div style="margin-top:18px">
+      <button type="submit" class="uuba-submit">Send review request</button>
+    </div>
+    <div id="uubaCaseReviewMessage" role="status" style="margin-top:14px"></div>
+  </form>
+</section>
+
+<style>
+#uuba-review-request label{display:block;font-weight:700;color:#152238;margin:0 0 14px}
+#uuba-review-request input,#uuba-review-request select,#uuba-review-request textarea{display:block;width:100%;margin-top:7px;padding:12px 13px;border:1px solid #cbd6df;border-radius:10px;font:inherit;background:#fff;color:#152238;box-sizing:border-box}
+#uuba-review-request textarea{resize:vertical}
+.uuba-intake-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.uuba-check{display:flex!important;align-items:flex-start;gap:9px;font-weight:500!important}
+.uuba-check input{width:auto!important;margin-top:3px!important}
+.uuba-intake-note{background:#f4f7fa;border-radius:10px;padding:12px 14px;color:#536a7d}
+.uuba-submit{background:#117f78;color:#fff;border:0;border-radius:10px;padding:14px 20px;font-weight:800;cursor:pointer}
+@media(max-width:720px){.uuba-intake-grid{grid-template-columns:1fr}}
+</style>
+"""
+
+FORM_JS = r"""
+<script id="uuba-case-review-intake-js">
+(function(){
+  const form=document.getElementById('uubaCaseReviewForm');
+  if(!form) return;
+
+  form.addEventListener('submit',async function(e){
+    e.preventDefault();
+
+    const msg=document.getElementById('uubaCaseReviewMessage');
+    const btn=form.querySelector('button[type=submit]');
+    btn.disabled=true;
+    msg.textContent='Sending your request…';
+
+    const fd=new FormData(form);
+    const body={};
+    for(const [k,v] of fd.entries()) body[k]=v;
+
+    body.has_documents=form.elements.has_documents.checked;
+    body.privacy_consent=form.elements.privacy_consent.checked;
+
+    try{
+      const r=await fetch('/api/case-review/intake',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)
+      });
+
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||'Your request could not be sent.');
+
+      msg.innerHTML='<strong>Request received.</strong> Your Uúba reference is <strong>'+d.reference+'</strong>. Please keep this reference. Uúba will assess availability and scope before any substantive review begins.';
+      form.reset();
+    }catch(err){
+      msg.textContent=err.message||'Your request could not be sent.';
+    }finally{
+      btn.disabled=false;
+    }
+  });
+})();
+</script>
+"""
+
+p = Path("case-review.html")
+if p.exists():
+    s = p.read_text(encoding="utf-8")
+
+    if 'id="uuba-review-request"' not in s:
+        if "</main>" in s:
+            s = s.replace("</main>", FORM + "\n</main>", 1)
+        else:
+            s = s.replace("</body>", FORM + "\n</body>", 1)
+
+    if 'id="uuba-case-review-intake-js"' not in s:
+        s = s.replace("</body>", FORM_JS + "\n</body>", 1)
+
+    p.write_text(s, encoding="utf-8")
+
+ADMIN_SECTION = r"""
+<section id="uuba-intake-queue" style="margin:28px 0;background:#fff;border:1px solid #d7e0e8;border-radius:16px;padding:22px">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+    <div>
+      <div style="font-size:13px;font-weight:800;color:#117f78">PERSONAL CASE REVIEW INTAKE</div>
+      <h2 style="margin:5px 0">New review requests</h2>
+    </div>
+
+    <div>
+      <select id="uubaIntakeFilter">
+        <option value="">All statuses</option>
+        <option value="new">New</option>
+        <option value="triage">Triage</option>
+        <option value="awaiting_information">Awaiting information</option>
+        <option value="scoped">Scoped</option>
+        <option value="quoted">Quoted</option>
+        <option value="accepted">Accepted</option>
+        <option value="in_review">In review</option>
+        <option value="qa">QA</option>
+        <option value="completed">Completed</option>
+        <option value="declined">Declined</option>
+      </select>
+      <button type="button" onclick="uubaLoadIntake()">Refresh</button>
+    </div>
+  </div>
+
+  <div id="uubaIntakeSummary" style="margin:14px 0;color:#536a7d"></div>
+
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Customer</th>
+          <th>Category</th>
+          <th>Submitted</th>
+          <th>Status</th>
+          <th>Quote</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="uubaIntakeRows"></tbody>
+    </table>
+  </div>
+
+  <div id="uubaIntakeDetail" style="display:none;margin-top:22px;border-top:1px solid #e0e6eb;padding-top:20px"></div>
+</section>
+
+<style>
+#uuba-intake-queue th,#uuba-intake-queue td{text-align:left;padding:10px 8px;border-bottom:1px solid #edf1f4;vertical-align:top}
+#uuba-intake-queue th{font-size:13px;color:#607184}
+#uuba-intake-queue select,#uuba-intake-queue input,#uuba-intake-queue textarea{padding:10px;border:1px solid #cbd6df;border-radius:8px;font:inherit}
+#uuba-intake-queue button{padding:10px 13px;border:0;border-radius:8px;background:#117f78;color:#fff;font-weight:800;cursor:pointer}
+.uuba-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.uuba-detail-grid label{display:block;font-weight:700}
+.uuba-detail-grid input,.uuba-detail-grid select,.uuba-detail-grid textarea{display:block;width:100%;margin-top:6px;box-sizing:border-box}
+.uuba-full{grid-column:1/-1}
+@media(max-width:760px){.uuba-detail-grid{grid-template-columns:1fr}.uuba-full{grid-column:auto}}
+</style>
+"""
+
+ADMIN_JS = r"""
+<script id="uuba-case-intake-admin-js">
+(function(){
+  function token(){return sessionStorage.getItem('helper_admin_token')||''}
+
+  async function req(path,opts={}){
+    opts.headers=Object.assign({
+      'Authorization':'Bearer '+token(),
+      'Content-Type':'application/json'
+    },opts.headers||{});
+
+    const r=await fetch(path,opts);
+    const d=await r.json().catch(()=>({}));
+
+    if(!r.ok) throw new Error(d.detail||('Request failed ('+r.status+')'));
+    return d;
+  }
+
+  function esc(v){
+    return String(v??'').replace(/[&<>"']/g,m=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[m]));
+  }
+
+  function pretty(s){
+    return String(s||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+  }
+
+  window.uubaLoadIntake=async function(){
+    const rows=document.getElementById('uubaIntakeRows');
+    if(!rows) return;
+
+    rows.innerHTML='<tr><td colspan="7">Loading…</td></tr>';
+
+    try{
+      const f=document.getElementById('uubaIntakeFilter').value;
+
+      const [d,sum]=await Promise.all([
+        req('/api/admin/case-intake'+(f?'?status='+encodeURIComponent(f):'')),
+        req('/api/admin/case-intake/summary')
+      ]);
+
+      document.getElementById('uubaIntakeSummary').textContent=
+        `New ${sum.new_requests} · Triage ${sum.triage} · Awaiting info ${sum.awaiting_information} · Quoted ${sum.quoted} · In review ${sum.in_review} · QA ${sum.qa}`;
+
+      rows.innerHTML=d.items.length
+        ? d.items.map(x=>`<tr>
+            <td><strong>${esc(x.reference)}</strong></td>
+            <td>${esc(x.customer_name)}<br><small>${esc(x.email)}</small></td>
+            <td>${esc(x.category)}</td>
+            <td>${esc((x.created_at||'').slice(0,10))}</td>
+            <td>${esc(pretty(x.status))}</td>
+            <td>${x.quote_amount!=null?'£'+Number(x.quote_amount).toFixed(2):'—'}</td>
+            <td><button type="button" onclick="uubaOpenIntake('${esc(x.reference)}')">Open</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="7">No requests in this view.</td></tr>';
+
+    }catch(e){
+      rows.innerHTML='<tr><td colspan="7">'+esc(e.message)+'</td></tr>';
+    }
+  }
+
+  window.uubaOpenIntake=async function(ref){
+    try{
+      const x=await req('/api/admin/case-intake/'+encodeURIComponent(ref));
+      const box=document.getElementById('uubaIntakeDetail');
+      box.style.display='block';
+
+      box.innerHTML=`
+        <h3>${esc(x.reference)} — ${esc(x.customer_name)}</h3>
+        <p>
+          <strong>Email:</strong> ${esc(x.email)}
+          ${x.phone?' · <strong>Phone:</strong> '+esc(x.phone):''}
+          <br>
+          <strong>Category:</strong> ${esc(x.category)}
+          ${x.trader_name?' · <strong>Trader:</strong> '+esc(x.trader_name):''}
+        </p>
+
+        <p><strong>Case summary</strong><br>${esc(x.summary).replace(/\n/g,'<br>')}</p>
+
+        ${x.desired_outcome
+          ? '<p><strong>Desired outcome</strong><br>'+esc(x.desired_outcome).replace(/\n/g,'<br>')+'</p>'
+          : ''}
+
+        ${x.evidence_notes
+          ? '<p><strong>Evidence held</strong><br>'+esc(x.evidence_notes).replace(/\n/g,'<br>')+'</p>'
+          : ''}
+
+        <div class="uuba-detail-grid">
+          <label>Status
+            <select id="uubaEditStatus">
+              ${['new','triage','awaiting_information','scoped','quoted','accepted','in_review','qa','completed','declined']
+                .map(s=>`<option value="${s}" ${x.status===s?'selected':''}>${pretty(s)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>Scope level
+            <select id="uubaEditScope">
+              <option value="">Not set</option>
+              ${['standard','complex','bespoke']
+                .map(s=>`<option value="${s}" ${x.scope_level===s?'selected':''}>${pretty(s)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label>Quote (£)
+            <input id="uubaEditQuote" type="number" min="0" step="0.01" value="${x.quote_amount??''}">
+          </label>
+
+          <label>Assigned to
+            <input id="uubaEditAssigned" value="${esc(x.assigned_to||'')}">
+          </label>
+
+          <label class="uuba-full">Quote / scope notes
+            <textarea id="uubaEditQuoteNotes" rows="4">${esc(x.quote_notes||'')}</textarea>
+          </label>
+
+          <label class="uuba-full">Internal caseworker notes
+            <textarea id="uubaEditInternal" rows="6">${esc(x.internal_notes||'')}</textarea>
+          </label>
+
+          <div class="uuba-full">
+            <button type="button" onclick="uubaSaveIntake('${esc(x.reference)}')">Save case assessment</button>
+            <span id="uubaIntakeSaveMsg"></span>
+          </div>
+        </div>
+      `;
+
+      box.scrollIntoView({behavior:'smooth',block:'start'});
+
+    }catch(e){
+      alert(e.message);
+    }
+  }
+
+  window.uubaSaveIntake=async function(ref){
+    const payload={
+      status:document.getElementById('uubaEditStatus').value,
+      scope_level:document.getElementById('uubaEditScope').value||null,
+      quote_amount:document.getElementById('uubaEditQuote').value||null,
+      assigned_to:document.getElementById('uubaEditAssigned').value,
+      quote_notes:document.getElementById('uubaEditQuoteNotes').value,
+      internal_notes:document.getElementById('uubaEditInternal').value
+    };
+
+    const m=document.getElementById('uubaIntakeSaveMsg');
+    m.textContent='Saving…';
+
+    try{
+      await req('/api/admin/case-intake/'+encodeURIComponent(ref),{
+        method:'PATCH',
+        body:JSON.stringify(payload)
+      });
+
+      m.textContent='Saved';
+      await uubaLoadIntake();
+
+    }catch(e){
+      m.textContent=e.message;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded',function(){
+    const f=document.getElementById('uubaIntakeFilter');
+    if(f){
+      f.addEventListener('change',uubaLoadIntake);
+      if(token()) uubaLoadIntake();
+    }
+  });
+})();
+</script>
+"""
+
+p = Path("caseworker-admin.html")
+if p.exists():
+    s = p.read_text(encoding="utf-8")
+
+    if 'id="uuba-intake-queue"' not in s:
+        if "</main>" in s:
+            s = s.replace("</main>", ADMIN_SECTION + "\n</main>", 1)
+        else:
+            s = s.replace("</body>", ADMIN_SECTION + "\n</body>", 1)
+
+    if 'id="uuba-case-intake-admin-js"' not in s:
+        s = s.replace("</body>", ADMIN_JS + "\n</body>", 1)
+
+    p.write_text(s, encoding="utf-8")
+
+assert APP_MARKER in Path("app.py").read_text(encoding="utf-8")
+assert 'id="uuba-review-request"' in Path("case-review.html").read_text(encoding="utf-8")
+assert 'id="uuba-intake-queue"' in Path("caseworker-admin.html").read_text(encoding="utf-8")
+
+print("Uúba case review intake pipeline installed")
+PY
 
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
