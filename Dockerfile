@@ -1043,6 +1043,8 @@ assert Path('case-review.html').exists()
 
 print('Uúba Personal Case Review update passed')
 PY
+COPY uuba_launch_patch.py /tmp/uuba_launch_patch.py
+RUN python /tmp/uuba_launch_patch.py && rm /tmp/uuba_launch_patch.py
 
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
