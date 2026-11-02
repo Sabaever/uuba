@@ -45,3 +45,52 @@ assert '@app.post("/api/case-review/intake")' in final
 assert '@app.get("/api/admin/case-intake/summary")' in final
 assert '@app.get("/case-review-terms.html"' in final
 print("Uúba launch intake V4 installed successfully")
+
+
+# ---- UUBA BILLING EXTENSION ----
+from pathlib import Path
+import re, shutil, subprocess, sys
+subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-cache-dir', 'stripe>=10,<20'])
+ROOT=Path('/app')
+app_path=ROOT/'app.py'
+idx_path=ROOT/'index.html'
+admin_path=ROOT/'admin.html'
+req_path=ROOT/'requirements.txt'
+app=app_path.read_text(encoding='utf-8')
+idx=idx_path.read_text(encoding='utf-8')
+admin=admin_path.read_text(encoding='utf-8')
+
+# requirements
+req=req_path.read_text(encoding='utf-8')
+if 'stripe' not in req.lower():
+    req += '\nstripe>=10,<20\n'
+req_path.write_text(req,encoding='utf-8')
+
+MARK='# UUBA BILLING V1'
+if MARK not in app:
+    billing = r'''
+
+# UUBA BILLING V1
+# Stripe-backed subscriptions and one-off purchases. Payment secrets are supplied only through environment variables.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_PRICE_PLUS_MONTHLY = os.getenv("STRIPE_PRICE_PLUS_MONTHLY", "").strip()
+STRIPE_PRICE_PLUS_YEARLY = os.getenv("STRIPE_PRICE_PLUS_YEARLY", "").strip()
+STRIPE_PRICE_AI_REVIEW = os.getenv("STRIPE_PRICE_AI_REVIEW", "").strip()
+UUBA_BILLING_ENFORCE = os.getenv("UUBA_BILLING_ENFORCE", "0").strip() == "1"
+
+def _stripe():
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(503, "Payments are not yet connected.")
+    try:
+        import stripe
+    except Exception:
+        raise HTTPException(503, "Payment service is unavailable.")
+    stripe.api_key = STRIPE_SECRET_KEY
+    return stripe
+
+def init_billing_schema():
+    con=db()
+    if is_postgres(DATABASE_URL):
+        con.execute("""CREATE TABLE IF NOT EXISTS uuba_billing(
+          user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
