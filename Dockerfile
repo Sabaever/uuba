@@ -217,6 +217,311 @@ print('Uúba public-content and navigation patch checks passed')
 PY
 
 RUN pip install --no-cache-dir -r requirements.txt
+# ---------------------------------------------------------------
+# UÚBA PERSONAL CASE REVIEW & CONSULTANCY
+# ---------------------------------------------------------------
+
+RUN python - <<'PY'
+from pathlib import Path
+
+CASE_REVIEW = r'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal Case Review & Consultancy | Uúba</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;color:#172033;background:#fff;line-height:1.6}
+.wrap{max-width:1080px;margin:auto;padding:0 22px}
+header{border-bottom:1px solid #ddd;padding:18px 0}
+header a{text-decoration:none;color:#172033;font-weight:700;margin-right:18px}
+.hero{padding:64px 0;background:#f5faf9}
+h1{font-size:42px;line-height:1.1;margin:8px 0 18px}
+h2{margin-top:38px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{border:1px solid #dfe5ec;border-radius:14px;padding:20px}
+.price{font-size:27px;font-weight:800}
+.btn{display:inline-block;background:#0f766e;color:#fff!important;padding:12px 17px;border-radius:8px;text-decoration:none;font-weight:700}
+.note{background:#f2fbf9;border-left:4px solid #0f766e;padding:18px;margin:24px 0}
+@media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:34px}}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+<a href="/">Uúba</a>
+<a href="/#start">Start a case</a>
+<a href="/#plans">Plans</a>
+<a href="/consumer-voices.html">Shared Experiences</a>
+<a href="/specialists.html">Independent Help</a>
+</div>
+</header>
+
+<section class="hero">
+<div class="wrap">
+<p><strong>PERSONAL CASE REVIEW & CONSULTANCY</strong></p>
+
+<h1>When your dispute needs more than an automated answer.</h1>
+
+<p>
+Uúba can provide a structured personal review of eligible consumer disputes.
+We organise the history, identify the main issues, review the evidence and
+responses, and help you understand practical next steps.
+</p>
+
+<p><strong>You remain in control of the decisions.</strong></p>
+</div>
+</section>
+
+<section>
+<div class="wrap">
+
+<h2>Cases we currently review</h2>
+
+<p>
+Car dealers and used vehicles · New-build homes · Consumer goods and services ·
+Phone and broadband · Trades and workmanship · Energy · Travel
+</p>
+
+<h2>What we do</h2>
+
+<div class="grid">
+
+<div class="card">
+<h3>Organise</h3>
+<p>
+We turn emails, letters, reports and other evidence into a concise chronology
+and identify what is actually still in dispute.
+</p>
+</div>
+
+<div class="card">
+<h3>Assess</h3>
+<p>
+We identify answered and unanswered points, inconsistencies, evidence gaps,
+failed remedies and matters that may require independent professional input.
+</p>
+</div>
+
+<div class="card">
+<h3>Next steps</h3>
+<p>
+We explain practical complaint, ADR, ombudsman, warranty, expert or independent
+professional routes where appropriate.
+</p>
+</div>
+
+</div>
+
+<h2>Indicative pricing</h2>
+
+<div class="grid">
+
+<div class="card">
+<h3>Focused Review</h3>
+<div class="price">£79–£129</div>
+<p>
+For a relatively contained dispute with one principal issue, a short history
+and a limited amount of correspondence.
+</p>
+</div>
+
+<div class="card">
+<h3>Detailed Review</h3>
+<div class="price">£149–£299</div>
+<p>
+For cases involving several issues, more correspondence, repeated complaints
+or attempted remedies and a fuller evidence review.
+</p>
+</div>
+
+<div class="card">
+<h3>Complex Review</h3>
+<div class="price">From £350</div>
+<p>
+For substantial evidence bundles, technical reports, multiple organisations,
+failed remediation or lengthy case histories.
+</p>
+
+<p><strong>We assess the scope and agree the price before substantive work begins.</strong></p>
+</div>
+
+</div>
+
+<div class="note">
+<strong>Uúba is not a law firm.</strong>
+We do not act as your solicitor, conduct litigation, represent you in court,
+or provide surveying, engineering or other regulated professional opinions.
+Where specialist or regulated advice is needed, we will say so and point you
+towards an appropriate independent route.
+</div>
+
+<h2>What your review can include</h2>
+
+<ul>
+<li>Concise case summary</li>
+<li>Key chronology</li>
+<li>Issue-by-issue review</li>
+<li>Evidence assessment</li>
+<li>Identification of unanswered points</li>
+<li>Review of the organisation's response</li>
+<li>Identification of missing evidence</li>
+<li>Practical next-step plan</li>
+<li>Appropriate escalation routes</li>
+<li>Identification of professional expertise that may be required</li>
+<li>Help preparing complaint, chaser or escalation correspondence where appropriate</li>
+</ul>
+
+<h2>Complex cases</h2>
+
+<p>
+Some cases involve dozens or hundreds of emails, reports, photographs,
+contracts or several years of history. We do not charge those cases as though
+they were simple reviews.
+</p>
+
+<p>
+We first assess the material and tell you what we propose to review,
+what we will produce and what it will cost.
+</p>
+
+<h2>Independent help where needed</h2>
+
+<p>
+Where a matter requires legal or other professional advice, we can point you
+towards appropriate independent services. Uúba does not need to receive a
+referral commission for recommending that specialist assistance may be needed.
+</p>
+
+<p>
+<a class="btn" href="/#start">Start with Uúba</a>
+</p>
+
+</div>
+</section>
+
+<footer style="margin-top:50px;border-top:1px solid #ddd;padding:30px 0">
+<div class="wrap">
+<strong>Uúba</strong> — Know your rights. Know your next step.
+</div>
+</footer>
+
+</body>
+</html>
+'''
+
+Path('case-review.html').write_text(CASE_REVIEW, encoding='utf-8')
+
+
+# Add Personal Case Review section to main homepage
+index_path = Path('index.html')
+index = index_path.read_text(encoding='utf-8')
+
+PERSONAL_HOME = r'''
+<section id="personal-review" style="padding:36px 18px">
+<div style="max-width:1100px;margin:auto;border:1px solid #dfe5ec;border-radius:18px;padding:26px;background:#f7fbfa">
+
+<div style="font-size:.8rem;font-weight:800;color:#0f766e;text-transform:uppercase;letter-spacing:.06em">
+Personal support
+</div>
+
+<h2>Personal Case Review & Consultancy</h2>
+
+<p>
+Some disputes need more than automated guidance. For eligible car dealer,
+new-build, consumer, phone and broadband, trades, energy and travel disputes,
+Uúba can provide a structured individual review of your case.
+</p>
+
+<p>
+We can organise the chronology, review correspondence and evidence,
+identify unanswered points and help you understand practical next steps.
+</p>
+
+<p>
+<strong>
+Focused Review £79–£129 · Detailed Review £149–£299 ·
+Complex Review from £350
+</strong>
+</p>
+
+<p style="font-size:.92rem;color:#5f6b7a">
+Complex cases are scoped and quoted before substantive work begins.
+Uúba is not a law firm and does not provide legal representation.
+</p>
+
+<a href="/case-review.html"
+style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;border-radius:9px;padding:11px 16px;font-weight:800">
+See Personal Case Review
+</a>
+
+</div>
+</section>
+'''
+
+if 'id="personal-review"' not in index:
+    if '</main>' in index:
+        index = index.replace('</main>', PERSONAL_HOME + '\n</main>', 1)
+    else:
+        index = index.replace('</body>', PERSONAL_HOME + '\n</body>', 1)
+
+index_path.write_text(index, encoding='utf-8')
+
+
+# Add Personal Case Review to Specialist Help page
+sp = Path('specialists.html')
+
+if sp.exists():
+    text = sp.read_text(encoding='utf-8')
+
+    PERSONAL_SPECIALIST = r'''
+<section style="max-width:1100px;margin:28px auto;padding:0 20px">
+<div style="border:1px solid #dfe5ec;border-radius:16px;padding:24px;background:#f7fbfa">
+
+<h2>Need a personal case review?</h2>
+
+<p>
+For eligible disputes that need more than automated guidance,
+Uúba offers a structured Personal Case Review & Consultancy service.
+</p>
+
+<p>
+<strong>
+Focused £79–£129 · Detailed £149–£299 · Complex from £350
+</strong>
+</p>
+
+<p>
+<a href="/case-review.html" style="font-weight:800">
+View Personal Case Review & Consultancy →
+</a>
+</p>
+
+</div>
+</section>
+'''
+
+    if '/case-review.html' not in text:
+        if '</main>' in text:
+            text = text.replace('</main>', PERSONAL_SPECIALIST + '\n</main>', 1)
+        else:
+            text = text.replace('</body>', PERSONAL_SPECIALIST + '\n</body>', 1)
+
+        sp.write_text(text, encoding='utf-8')
+
+
+# Final validation
+idx = Path('index.html').read_text(encoding='utf-8')
+
+assert 'Personal Case Review & Consultancy' in idx
+assert '£14.99' in idx
+assert '£129' in idx
+assert '£34.99' in idx
+assert Path('case-review.html').exists()
+
+print('Uúba Personal Case Review update passed')
+PY
 
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
