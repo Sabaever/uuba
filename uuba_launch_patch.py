@@ -58,6 +58,19 @@ admin_path=ROOT/'admin.html'
 req_path=ROOT/'requirements.txt'
 app=app_path.read_text(encoding='utf-8')
 idx=idx_path.read_text(encoding='utf-8')
+# Repair an embedded closing </script> tag inside the printGeneratedLetter JavaScript.
+# In HTML, a literal </script> terminates the surrounding script element even when it
+# appears inside a JavaScript template/string, causing the remaining JS to render as text.
+if 'function printGeneratedLetter' in idx:
+    _ps = idx.index('function printGeneratedLetter')
+    _pe = idx.find('async function deleteHelperDoc', _ps)
+    if _pe == -1:
+        _pe = min(len(idx), _ps + 12000)
+    _pseg = idx[_ps:_pe]
+    if '</script>' in _pseg:
+        _pseg = _pseg.replace('</script>', '<\\/script>')
+        idx = idx[:_ps] + _pseg + idx[_pe:]
+
 admin=admin_path.read_text(encoding='utf-8')
 
 # requirements
