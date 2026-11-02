@@ -215,7 +215,36 @@ assert 'href="./index.html#' not in cv
 
 print('Uúba public-content and navigation patch checks passed')
 PY
+# Serve Personal Case Review page
+RUN python - <<'PY'
+from pathlib import Path
 
+p = Path("app.py")
+s = p.read_text(encoding="utf-8")
+
+marker = '@app.get("/specialists", response_class=HTMLResponse)'
+
+routes = '''
+@app.get("/case-review", response_class=HTMLResponse)
+def case_review_page():
+    return FileResponse(ROOT / "case-review.html")
+
+@app.get("/case-review.html", response_class=HTMLResponse)
+def case_review_page_html():
+    return FileResponse(ROOT / "case-review.html")
+
+'''
+
+if '@app.get("/case-review"' not in s:
+    s = s.replace(marker, routes + marker, 1)
+
+p.write_text(s, encoding="utf-8")
+
+assert '@app.get("/case-review"' in s
+assert '@app.get("/case-review.html"' in s
+
+print("Personal Case Review routes added")
+PY
 RUN pip install --no-cache-dir -r requirements.txt
 # ---------------------------------------------------------------
 # UÚBA PERSONAL CASE REVIEW & CONSULTANCY
