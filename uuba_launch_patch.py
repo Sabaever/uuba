@@ -47,7 +47,7 @@ app_path.write_text(app,encoding='utf-8')
 # Frontend paid flow
 if 'id="uuba-billing-account"' not in idx:
     plus_old='<p class="muted">Provisional private-beta price.</p></article>'
-    plus_new='''<div class="actions" style="margin-top:16px"><button class="btn" type="button" onclick="startPlusCheckout('monthly')">Choose monthly — £14.99</button><button class="btn alt" type="button" onclick="startPlusCheckout('annual')">Choose annual — £129</button></div><p class="muted">Annual saves £50.88 compared with 12 monthly payments. Renews automatically until cancelled. You can cancel online from your Uúba account.</p></article>'''
+    plus_new = "<div class=\"actions\" style=\"margin-top:16px\"><button class=\"btn\" type=\"button\" onclick=\"startPlusCheckout(\'monthly\')\">Choose monthly - &pound;14.99</button><button class=\"btn alt\" type=\"button\" onclick=\"startPlusCheckout(\'annual\')\">Choose annual - &pound;129</button></div><p class=\"muted\">Annual saves &pound;50.88 compared with 12 monthly payments. Renews automatically until cancelled. You can cancel online from your Uuba account.</p></article>"
     idx=idx.replace(plus_old,plus_new,1)
     ai_old='<p class="muted">Not legal advice or a prediction of outcome.</p></article>'
     ai_new='''<div class="actions" style="margin-top:16px"><button class="btn" type="button" onclick="startAiReviewCheckout()">Buy review — £34.99</button></div><p class="muted">One-off purchase. Not legal advice or a prediction of outcome.</p></article>'''
