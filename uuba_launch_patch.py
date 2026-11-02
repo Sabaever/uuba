@@ -410,7 +410,10 @@ window.resumePlus=async function(){try{await uubaPost('/api/billing/resume-plus'
 (function(){const p=new URLSearchParams(location.search).get('payment');const box=document.getElementById('uubaPaymentNotice');if(p&&box){box.style.display='block';box.textContent=p.includes('success')?'Payment completed. Your account will update automatically once the payment confirmation arrives.':'Checkout cancelled - no new purchase was completed.'}setTimeout(()=>{if(typeof refreshBillingStatus==='function')refreshBillingStatus()},500)})();
 </script>
 '''
-    idx=idx.replace('</body>',js+'\n</body>',1)
+    # The production index has no real closing </body>; its only </body> occurs inside
+    # the printGeneratedLetter popup template. Appending here keeps billing outside that
+    # JavaScript string and prevents raw source from leaking into the rendered page.
+    idx = idx + '\n' + js + '\n'
 
 # Patch existing auth success/sign in/out to refresh billing and continue pending checkout.
 idx=idx.replace("closeAuth();showSignedIn();await loadServerCases()", "closeAuth();showSignedIn();await loadServerCases();if(typeof refreshBillingStatus==='function')await refreshBillingStatus();if(typeof resumePendingPurchase==='function')await resumePendingPurchase()")
