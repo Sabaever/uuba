@@ -245,6 +245,93 @@ assert '@app.get("/case-review.html"' in s
 
 print("Personal Case Review routes added")
 PY
+# ---------------------------------------------------------------
+# UÚBA PERSONAL REVIEW - LIMITED AVAILABILITY POSITIONING
+# ---------------------------------------------------------------
+
+RUN python - <<'PY'
+from pathlib import Path
+
+# Main Personal Case Review page
+p = Path("case-review.html")
+if p.exists():
+    s = p.read_text(encoding="utf-8")
+
+    s = s.replace(
+        "PERSONAL CASE REVIEW & CONSULTANCY",
+        "PERSONAL CASE REVIEW — LIMITED AVAILABILITY"
+    )
+
+    s = s.replace(
+        "Uúba can provide a structured personal review of eligible consumer disputes.",
+        "For cases that need more than automated guidance, Uúba can provide a structured human review on a limited-availability basis."
+    )
+
+    s = s.replace(
+        "We organise the history, identify the main issues, review the evidence and\nresponses, and help you understand practical next steps.",
+        "We organise the history, identify the main issues, review the evidence and responses, and help you understand practical next steps. We assess the scope first and confirm the price before substantive work begins."
+    )
+
+    s = s.replace(
+        '<div class="price">From £350</div>',
+        '<div class="price">From £350</div><p><strong>Quoted after initial scope assessment.</strong></p>'
+    )
+
+    p.write_text(s, encoding="utf-8")
+
+
+# Homepage wording
+p = Path("index.html")
+s = p.read_text(encoding="utf-8")
+
+s = s.replace(
+    "<h2>Personal Case Review & Consultancy</h2>",
+    "<h2>Personal Case Review — limited availability</h2>"
+)
+
+s = s.replace(
+    "Some disputes need more than automated guidance. For eligible car dealer,\nnew-build, consumer, phone and broadband, trades, energy and travel disputes,\nUúba can provide a structured individual review of your case.",
+    "Some disputes need more than automated guidance. For eligible car dealer, new-build, consumer, phone and broadband, trades, energy and travel disputes, Uúba can provide a structured human review on a limited-availability basis."
+)
+
+s = s.replace(
+    "Complex Review from £350",
+    "Complex Review from £350 — quoted after initial scope assessment"
+)
+
+if "We assess the scope first and confirm the price before substantive work begins." not in s:
+    s = s.replace(
+        "We can organise the chronology, review correspondence and evidence,\nidentify unanswered points and help you understand practical next steps.",
+        "We can organise the chronology, review correspondence and evidence, identify unanswered points and help you understand practical next steps. We assess the scope first and confirm the price before substantive work begins."
+    )
+
+p.write_text(s, encoding="utf-8")
+
+
+# Specialist Help wording
+p = Path("specialists.html")
+if p.exists():
+    s = p.read_text(encoding="utf-8")
+
+    s = s.replace(
+        "<h2>Need a personal case review?</h2>",
+        "<h2>Personal Case Review — limited availability</h2>"
+    )
+
+    s = s.replace(
+        "For eligible disputes that need more than automated guidance,\nUúba offers a structured Personal Case Review & Consultancy service.",
+        "For eligible disputes that need more than automated guidance, Uúba offers a structured human review on a limited-availability basis. We assess the scope first and confirm the price before substantive work begins."
+    )
+
+    s = s.replace(
+        "Complex from £350",
+        "Complex from £350 — quoted after initial scope assessment"
+    )
+
+    p.write_text(s, encoding="utf-8")
+
+print("Limited-availability Personal Case Review wording updated")
+PY
 RUN pip install --no-cache-dir -r requirements.txt
 # ---------------------------------------------------------------
 # UÚBA PERSONAL CASE REVIEW & CONSULTANCY
