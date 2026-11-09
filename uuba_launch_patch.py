@@ -467,3 +467,173 @@ if 'href="/new-build-resolution"' not in _nb_idx:
     (ROOT/'index.html').write_text(_nb_idx,encoding='utf-8')
 print('New Build Defect Resolution Centre added')
 
+# ---- UUBA V9: SIMPLIFIED PRICING, QUOTED CONSULTANCY, EVIDENCE-LED AI ----
+from pathlib import Path as _V9Path
+import re as _v9re
+import textwrap as _v9tw
+_V9ROOT = _V9Path('/app')
+_v9app = _V9ROOT / 'app.py'
+_v9index = _V9ROOT / 'index.html'
+_v9case = _V9ROOT / 'case-review.html'
+_v9nb = _V9ROOT / 'new-build-resolution.html'
+
+# Override the response analysis function after the original is installed. Existing API
+# and consumers retain their original response fields; additional fields are optional.
+_V9_AI = r'''
+# UUBA V9 EVIDENCE-LED RESPONSE ANALYSER
+
+def live_response_analysis(case: dict, response_text: str, allow_live: bool) -> dict:
+    baseline=rules_response_analysis(case,response_text)
+    baseline['mode']='rules-only'
+    baseline['source_note']='Only the saved case fields and reply pasted into this analysis are considered. Uploaded file contents are NOT automatically read.'
+    baseline['issue_matrix']=[]
+    baseline['evidence_gaps']=[]
+    baseline['follow_up_questions']=[]
+    baseline['draft_response']=''
+    if not OPENAI_API_KEY or not allow_live:
+        baseline['warning']='Rules-only checklist, not semantic AI analysis. Enable AI in your account and check plan availability for detailed assistance.'
+        return baseline
+    try:
+        from openai import OpenAI
+        client=OpenAI(api_key=OPENAI_API_KEY)
+        saved={k:case.get(k) for k in ('organisation','category','subcategory','problem_date','facts','desired_outcome','status')}
+        verified=build_grounding(case)
+        prompt=('You are Uúba Evidence-Led Response Analyser. Compare the consumer SAVED CASE FACTS/ALLEGATIONS against the ORGANISATION REPLY, not merely the reply in isolation. '
+          'Return strictly valid JSON with keys answered, unanswered, evidence, trigger, next_step, review_questions, warning, issue_matrix, evidence_gaps, follow_up_questions, draft_response. '
+          'answered, unanswered, evidence, review_questions, evidence_gaps, follow_up_questions are arrays of concise strings. '
+          'issue_matrix is an array of at most 12 objects: issue (saved consumer allegation, NOT assumed true); reply_position (answered/partly_answered/disputed/not_addressed/unclear); reply_quote (EXACT short verbatim passage of supplied reply or empty); concern (why issue remains); evidence_to_check (what proof or question to check). '
+          'For each material issue, include an entry even if unanswered. Do not invent quotations; reply_quote MUST be an exact contiguous substring of supplied reply. If none, use empty. '
+          'Distinguish the company position, the consumer allegation, verified supporting evidence, and missing evidence. Document contents are not supplied unless expressly pasted. '
+          'Do not claim to have read attachments; do not fabricate document references or legislation. No legal merit predictions or categorical declarations of regulatory breaches. '
+          'Deadlines are to be verified from current official sources; verified guidance can inform trigger/next_step but may be incomplete. '
+          'draft_response: factual, professional suggested response for user to check, with numbered outstanding questions, avoiding threats and unsupported claims; never claim it was sent. '
+          'Do not claim human review. Avoid unnecessary personal data. Output may be wrong; encourage verification and expert help for urgent or technical matters.')
+        payload={'saved_case':saved,'organisation_reply':response_text,'existing_verified_category_guidance':verified,
+          'document_contents_supplied':False,'review_limitations':'Only saved case and pasted reply, not attached files'}
+        r=client.responses.create(model=OPENAI_MODEL,instructions=prompt,input=json.dumps(payload,ensure_ascii=False),store=False)
+        raw=(r.output_text or '').strip()
+        raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.S)
+        result=json.loads(raw)
+        if not isinstance(result,dict):raise ValueError('Expected JSON object')
+        for key in ('answered','unanswered','evidence','review_questions','evidence_gaps','follow_up_questions'):
+            val=result.get(key)
+            result[key]=[str(x)[:650] for x in val[:20] if isinstance(x,(str,int,float))] if isinstance(val,list) else []
+        matrix=[]
+        for item in (result.get('issue_matrix') or [])[:12]:
+            if not isinstance(item,dict):continue
+            quote=str(item.get('reply_quote') or '').strip()
+            # Never display a generated reply quote unless it appears exactly in the supplied text.
+            if quote and quote not in response_text:quote=''
+            position=str(item.get('reply_position') or 'unclear').lower()
+            if position not in {'answered','partly_answered','disputed','not_addressed','unclear'}:position='unclear'
+            matrix.append({'issue':str(item.get('issue') or '')[:600], 'reply_position':position,
+                'reply_quote':quote[:400], 'concern':str(item.get('concern') or '')[:650],
+                'evidence_to_check':str(item.get('evidence_to_check') or '')[:650]})
+        result['issue_matrix']=matrix
+        result['draft_response']=str(result.get('draft_response') or '')[:10000]
+        for k in ('trigger','next_step','warning'):
+            result[k]=str(result.get(k) or baseline.get(k) or '')[:1500]
+        result['source_note']=baseline['source_note']
+        result['mode']='openai'
+        return result
+    except Exception as e:
+        audit('response_analyser_v9_fallback',None,{'error':str(e)[:250]})
+        baseline['mode']='rules-fallback'
+        baseline['warning']='Detailed analysis was unavailable. Showing a rules-only checklist; it is not an AI document comparison.'
+        return baseline
+'''
+_v9_src=_v9app.read_text(encoding='utf-8')
+if '# UUBA V9 EVIDENCE-LED RESPONSE ANALYSER' not in _v9_src:
+    # Existing module already imports JSON/re and defines the case analysis helpers.
+    _v9app.write_text(_v9_src+'\n'+_V9_AI,encoding='utf-8')
+
+_V9_HTML = r'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Evidence-led Response Analyser | Uúba</title><style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#12313b;background:#f4f8f8}*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #d8e6e6;padding:18px 5%}a{color:#096b69}header a{font-weight:700;text-decoration:none}main{max-width:1050px;margin:24px auto;padding:0 18px 60px}h1{font-size:clamp(1.8rem,4vw,2.7rem);margin-bottom:6px}p{line-height:1.6}.lead{color:#47636a}.card{background:#fff;border:1px solid #d8e6e6;border-radius:16px;padding:23px;margin:18px 0}label{display:block;font-weight:700;margin:14px 0 6px}select,textarea{width:100%;padding:12px;border:1px solid #a9c6c6;border-radius:10px;font:inherit}textarea{min-height:210px;resize:vertical}button,.btn{padding:12px 18px;border:0;border-radius:10px;background:#106e6c;color:white;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:default}.sub{background:#edf5f5;border-radius:10px;padding:12px}.warning{color:#7d4225;background:#fff5e8;padding:12px;border-radius:10px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.item{padding:14px;border:1px solid #d8e6e6;border-radius:10px;margin:10px 0;overflow-wrap:anywhere}blockquote{border-left:3px solid #1a807c;padding-left:12px;margin:9px 0;color:#29474b}pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}small{color:#52696d}footer{padding:22px;text-align:center}#results{scroll-margin-top:30px}</style></head><body>
+<header><a href="/">✦ Uúba</a> &nbsp; / &nbsp; <a href="/#response-analyser">Response Analyser</a> &nbsp; / &nbsp; <a href="/case-review.html">Personal Consultancy</a></header>
+<main><h1>Evidence-led Response Analyser</h1><p class="lead">Compare a company's reply against the facts you saved in your case. See what appears answered, disputed or overlooked, what needs evidence, and a draft follow-up. Uúba does not automatically read uploaded attachments in this feature.</p>
+<section class="card"><h2>1. Choose your saved case</h2><p>Use <a href="/#cases">My Cases</a> to create a case first. Your saved case narrative is the starting point for comparison.</p><label for="case">Saved case</label><select id="case"><option value="">Loading cases…</option></select><div id="notice" class="sub" role="status">Sign in on the main website if your cases do not appear.</div><label for="reply">2. Paste the company's full reply</label><textarea id="reply" maxlength="30000" placeholder="Paste the full email or letter here (minimum 10 characters)"></textarea><p><button id="analyse" type="button">Analyse response</button></p><small>AI features require permission and an eligible plan when billing is activated. Otherwise a clearly labelled rules-only checklist may appear. Do not include unnecessary personal data.</small></section>
+<section id="results" class="card" hidden><h2>Review of your response</h2><p id="mode" class="sub"></p><p id="limitation" class="warning"></p><div id="matrix"></div><div class="grid"><div><h3>Answered or acknowledged</h3><div id="answered"></div></div><div><h3>Missing or unclear</h3><div id="unanswered"></div></div><div><h3>Evidence to check</h3><div id="evidence"></div></div><div><h3>Follow-up questions</h3><div id="questions"></div></div></div><h3>Suggested next step</h3><p id="next"></p><h3>Draft follow-up for you to check</h3><pre id="draft"></pre><button id="copy" type="button">Copy draft</button><p><small>This is an AI-assisted preparation tool, not a technical expert report, legal advice, or a guarantee of the outcome. Check all details before sending.</small></p></section>
+<section class="card"><h2>Complex or technical case?</h2><p>New-build defects, structural issues, major losses or urgent deadlines may require qualified professional input. Uúba can assess a request for human consultancy and issue an individual written quotation before any paid work. Independent professional investigations, site visits, travel and specialist reports are separately scoped.</p><a href="/case-review.html">Request an individual assessment</a> · <a href="/new-build-resolution">Track new-build defects</a></section></main><footer>Uúba · Your complaint. Your evidence. A clearer way forward.</footer>
+<script>
+let csrfToken='';const $=id=>document.getElementById(id);const escapeHTML=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const renderList=(id,items)=>$(id).innerHTML=Array.isArray(items)&&items.length?'<ul>'+items.map(x=>'<li>'+escapeHTML(String(x))+'</li>').join('')+'</ul>':'<p><small>No verified items identified.</small></p>';
+async function loadCases(){try{let m=await fetch('/api/me',{credentials:'same-origin'});if(!m.ok)throw new Error('Please sign in to your Uúba account first.');let me=await m.json();csrfToken=me.csrf||'';let r=await fetch('/api/cases',{credentials:'same-origin'});if(!r.ok)throw new Error('Please sign in to your Uúba account first.');let d=await r.json();let list=d.cases||[];$('case').innerHTML='<option value="">Choose a case</option>'+list.map(c=>'<option value="'+Number(c.id)+'">'+escapeHTML(c.organisation||'Case '+c.id)+' — '+escapeHTML(c.category||'Complaint')+'</option>').join('');$('notice').textContent=list.length?'Your case facts will be used to compare the reply.':'No saved case found. Create one in My Cases.'}catch(e){$('case').innerHTML='<option value="">Sign in to view your cases</option>';$('notice').textContent=e.message}}
+function cookie(name){const match=document.cookie.split('; ').find(x=>x.startsWith(name+'='));return match?decodeURIComponent(match.slice(name.length+1)):''}
+$('analyse').onclick=async()=>{const id=Number($('case').value),reply=$('reply').value.trim();if(!id||reply.length<10){$('notice').textContent='Choose a saved case and paste a reply of at least 10 characters.';return}let b=$('analyse');b.disabled=true;$('notice').textContent='Checking saved case against the pasted reply…';try{const csrf=cookie('uuba_csrf')||cookie('csrf_token');let headers={'Content-Type':'application/json'};if(csrfToken)headers['X-CSRF-Token']=csrfToken;let r=await fetch('/api/analyse-response',{method:'POST',credentials:'same-origin',headers,body:JSON.stringify({case_id:id,response_text:reply})});let d=await r.json();if(!r.ok)throw new Error(d.detail||'Analysis request failed');let a=d.analysis||{};$('results').hidden=false;$('mode').textContent=a.mode==='openai'?'AI-assisted comparison completed':'Rules-only checklist — detailed AI comparison was not available';$('limitation').textContent=(a.source_note||'')+' '+(a.warning||'');let matrix=Array.isArray(a.issue_matrix)?a.issue_matrix:[];$('matrix').innerHTML=matrix.length?'<h3>Issue-by-issue comparison</h3>'+matrix.map(m=>'<div class="item"><strong>'+escapeHTML(m.issue)+'</strong><p><small>Reply status: '+escapeHTML((m.reply_position||'unclear').replaceAll('_',' '))+'</small></p>'+(m.reply_quote?'<blockquote>'+escapeHTML(m.reply_quote)+'</blockquote>':'<p><small>No verbatim matching reply passage verified.</small></p>')+'<p>'+escapeHTML(m.concern)+'</p><small>Check: '+escapeHTML(m.evidence_to_check)+'</small></div>').join(''):'';renderList('answered',a.answered);renderList('unanswered',a.unanswered);renderList('evidence',a.evidence_gaps?.length?a.evidence_gaps:a.evidence);renderList('questions',a.follow_up_questions?.length?a.follow_up_questions:a.review_questions);$('next').textContent=a.next_step||'Review all the outstanding questions.';$('draft').textContent=a.draft_response||'A detailed draft requires live AI. Use the outstanding questions above to prepare a response.';$('notice').textContent='Analysis ready. Please verify every assertion before use.';$('results').scrollIntoView({behavior:'smooth',block:'start'})}catch(e){$('notice').textContent=e.message}finally{b.disabled=false}};
+$('copy').onclick=()=>{const s=$('draft').textContent;if(navigator.clipboard&&s)navigator.clipboard.writeText(s)};
+loadCases();
+</script></body></html>'''
+(_V9ROOT/'evidence-response-analyser.html').write_text(_V9_HTML,encoding='utf-8')
+_v9_app_src=_v9app.read_text(encoding='utf-8')
+if '# UUBA V9 ANALYSER PAGE ROUTE' not in _v9_app_src:
+    _v9_app_src+='\n# UUBA V9 ANALYSER PAGE ROUTE\n@app.get("/evidence-response-analyser",response_class=HTMLResponse)\ndef uuba_evidence_response_analyser_page():\n    return FileResponse(ROOT/"evidence-response-analyser.html")\n'
+    _v9app.write_text(_v9_app_src,encoding='utf-8')
+
+# Replace only the plans section, not the large original inline scripts.
+_v9_idx=_v9index.read_text(encoding='utf-8')
+_v9_plans='''<section class="section" id="plans"><div class="sectionhead"><div><span class="tag">Clear, fair pricing</span><h2>Free case management. AI when you need it. Human support by quotation.</h2><p>You can organise and track a complaint without paying. Optional Plus provides deeper case-aware AI analysis; specialist consultancy is individually scoped, never sold as a fixed package.</p></div></div><div class="grid"><article class="card"><span class="tag">Always available</span><h3>Uúba Core</h3><div class="price">Free</div><p>Manage your own complaint.</p><ul><li>Complaint workspace and evidence index</li><li>Basic templates, chronology and tracking</li><li>Self-help guidance and case export</li><li>Rules-only response checklist</li></ul><p class="muted">No payment card required. Storage and usage limits apply; Uúba does not take control of your complaint.</p></article><article class="card"><span class="tag">Optional advanced assistance</span><h3>Uúba Plus</h3><div class="price">£14.99/month <span style="font-size:.56em;font-weight:750">or £129/year</span></div><p>For deeper AI-assisted case preparation.</p><ul><li>Evidence-led Response Analyser</li><li>Issue-by-issue unanswered point checks</li><li>Source quotation validation and follow-up drafting</li><li>Multiple case workspaces when billing is active</li></ul><p><a href="/evidence-response-analyser">Explore the AI analyser</a></p><p class="muted">AI availability depends on account settings and service configuration. It can make mistakes. Fair-use limits apply. Checkout will only work when payments are connected.</p></article><article class="card"><span class="tag">Limited availability</span><h3>Personal Case Assessment & Consultancy</h3><div class="price">Individual quotation</div><p>No fixed or minimum consultancy fee is advertised.</p><ul><li>Free initial suitability and scope assessment</li><li>Written deliverables and agreed price before substantive work</li><li>Documents, complexity, time and specialist requirements assessed individually</li><li>Independent surveyors and qualified experts instructed separately where appropriate</li></ul><a class="btn" href="/case-review.html">Request an assessment</a><p class="muted">Requesting an assessment does not mean we have accepted your case. No percentage of compensation is charged.</p></article></div><p class="muted" style="margin-top:18px">Uúba provides case assessment, evidence organisation, complaint preparation and information on escalation or legal referral options, not claims management or legal representation. Uúba is not a law firm or chartered surveyor. We do not conduct inspections or certify compliance. Any specialist's competence, insurance, scope, travel time, site visits and fees must be agreed independently.</p></section>'''
+_v9_a=_v9_idx.find('<section class="section" id="plans">')
+if _v9_a<0: raise RuntimeError('Cannot locate plans section safely')
+_v9_b=_v9_idx.find('</section>',_v9_a)
+if _v9_b<0 or _v9_b-_v9_a>19000: raise RuntimeError('Unexpected plans section boundaries')
+_v9_idx=_v9_idx[:_v9_a]+_v9_plans+_v9_idx[_v9_b+len('</section>'):]
+# Clearly distinguish automated output from a professional human review.
+# Remove legacy duplicate public price cards that conflict with the agreed three-service pricing.
+_v9_grid_start=_v9_idx.find('<div aria-label="Uúba pricing" class="priceGrid">')
+_v9_grid_end=_v9_idx.find('<div class="specialistDirectory">',_v9_grid_start)
+if _v9_grid_start>=0 and _v9_grid_end>_v9_grid_start and _v9_grid_end-_v9_grid_start<15000:
+    _v9_idx=_v9_idx[:_v9_grid_start]+_v9_idx[_v9_grid_end:]
+# Update old static terms so they do not contradict the new subscription offering.
+_v9_idx=_v9_idx.replace('£6.99/month or £59/year','£14.99/month or £129/year')
+_v9_idx=_v9_idx.replace('<strong>AI Specialist Review + Pack:</strong> £24.99 one-off.','<strong>Optional AI preparation:</strong> the exact charge and conditions, if offered, are displayed before checkout.')
+_v9_idx=_v9_idx.replace('<strong>AI Case Preparation Pack:</strong> £24.99 one-off.','<strong>Optional AI preparation:</strong> the exact charge and conditions, if offered, are displayed before checkout.')
+_v9_idx=_v9_idx.replace('AI Specialist Review + Pack','AI Case Preparation Pack')
+_v9_idx=_v9_idx.replace('Buy review - £34.99','AI preparation — £34.99 (optional)')
+# The existing one-off billing code remains available for existing purchases. It is not marketed as human consultancy.
+_v9_idx=_v9_idx.replace('Focused Review £79–£129 · Detailed Review £149–£299 · Complex Review from £350','Individual quotation following a case suitability and scope assessment')
+_v9_idx=_v9_idx.replace('complex reviews from £350 where appropriate.','fees individually quoted after reviewing complexity, documents and expected work.')
+_v9_idx=_v9_idx.replace('£79–£129','quoted individually').replace('£149–£299','quoted individually').replace('from £350','quoted individually')
+_v9_idx=_v9_idx.replace('<a href="#response-analyser">Analyse a reply</a>','<a href="/evidence-response-analyser">Analyse a reply</a>',1)
+_v9_ai_card='''<section class="section" id="evidence-led-ai"><div class="sectionhead"><div><span class="tag">AI assistance with evidence checks</span><h2>Don't just file the reply. Understand what it does — and doesn't — answer.</h2><p>Use Uúba's <a href="/evidence-response-analyser">Evidence-led Response Analyser</a> to compare a company's reply to the complaint facts you saved, identify overlooked issues, verify quoted reply passages and prepare a clear follow-up. Document contents are only analysed when provided to the AI; an attachment index alone is not enough.</p><a class="btn" href="/evidence-response-analyser">Open Evidence-led Response Analyser</a></div></div></section>'''
+_v9_idx=_v9_idx.replace('<section class="section" id="plans">',_v9_ai_card+'<section class="section" id="plans">',1)
+_v9index.write_text(_v9_idx,encoding='utf-8')
+
+for _v9file in (_v9case,_v9nb):
+    if not _v9file.exists():continue
+    _v9txt=_v9file.read_text(encoding='utf-8')
+    _v9txt=_v9txt.replace('complex reviews from £350 where appropriate','individual written quotations after case assessment')
+    _v9txt=_v9txt.replace('from £350','individually quoted')
+    _v9txt=_v9txt.replace('£79–£129','individually quoted').replace('£149–£299','individually quoted')
+    if _v9file==_v9nb:
+        _v9txt=_v9txt.replace('No percentage of compensation.','No percentage of compensation. Inspection fees, travel time, expert reports and site visits are separately scoped by independent professionals.')
+    if _v9file==_v9case:
+        _v9txt=_v9txt.replace('Initial scope assessment only. Uúba confirms availability, scope and price before substantive work begins.','Initial suitability and scope assessment only. Where Uúba can assist, a written quotation sets out the services, expected time, deliverables, fees and limitations before substantive work begins. Complex new-build disputes or expert inspections may require independent qualified professionals. No fixed fee or guaranteed acceptance.')
+        # No fixed tiers: pricing depends on volume, urgency, technical issues and the actual work.
+        _v9_start=_v9txt.find('<h2>Indicative pricing</h2>')
+        _v9_end=_v9txt.find('<div class="note">',_v9_start)
+        if _v9_start>=0 and _v9_end>_v9_start and _v9_end-_v9_start<3500:
+            _v9txt=_v9txt[:_v9_start]+'''<h2>How consultancy is quoted</h2><div class="note"><p><strong>Each case is assessed individually.</strong> We consider the correspondence, complexity, urgency, time required and any agreed follow-up work. There is no published fixed rate, hourly rate or minimum fee for Uúba consultancy.</p><p>We first assess whether the request is suitable. If we can assist, we explain the proposed deliverables, time or scope assumptions, total price or charging basis, exclusions and payment terms in writing before work begins.</p><p>For new-build and other technical disputes, an independent chartered surveyor, engineer or specialist may need to be engaged separately. Their site visits, travel time, professional report and expert evidence are not included unless expressly confirmed.</p><p>No percentage of compensation. No commitment to take a case before an agreed written quote. Uúba assesses the information you provide, helps prepare a coherent case summary, and explains potential complaint escalation or legal referral options. Uúba does not conduct regulated claims management, act as a solicitor, provide legal representation, negotiate settlements, or pursue claims on your behalf. Specialist advice and legal services are provided separately by appropriately qualified or authorised professionals.</p></div>''' + _v9txt[_v9_end:]
+        _v9txt=_v9txt.replace('From £350','Individually quoted')
+    _v9file.write_text(_v9txt,encoding='utf-8')
+print('Uúba V9 service clarity and evidence-led AI installed')
+
+# ---- UUBA V9B: CASE ASSESSMENT AND ESCALATION / REFERRAL SCOPE ----
+from pathlib import Path as _v9bPath
+_v9b_root=_v9bPath('/app')
+_v9b_message=('Uúba helps assess your documents, organise evidence, prepare case summaries and explain available escalation or legal referral options. '
+ 'We do not take over or pursue claims, negotiate compensation, act as legal representatives, certify technical compliance or guarantee outcomes. '
+ 'Any legal advice, inspections or expert evidence must be agreed separately with appropriately authorised or qualified independent professionals.')
+for _v9b_name in ('index.html','case-review.html','case-review-terms.html','new-build-resolution.html'):
+    _v9b_p=_v9b_root/_v9b_name
+    if not _v9b_p.exists():continue
+    _v9b_text=_v9b_p.read_text(encoding='utf-8')
+    _v9b_text=_v9b_text.replace('We will not undertake any activity that requires FCA authorisation or another professional permission unless appropriately authorised or exempt.',_v9b_message)
+    _v9b_text=_v9b_text.replace('Uúba is not a law firm, chartered surveyor or regulated claims management provider.',_v9b_message)
+    if 'UUBA_V9B_CASE_SCOPE' not in _v9b_text:
+        _v9b_notice='<p id="UUBA_V9B_CASE_SCOPE" style="font-size:0.85rem;line-height:1.5;color:#486174;margin:18px auto;max-width:980px;padding:12px 16px;border:1px solid #d8e2e9;border-radius:12px;background:#f7fafb">'+_v9b_message+'</p>'
+        # Extra note at document end; no script injection.
+        _v9b_text+=_v9b_notice
+    _v9b_p.write_text(_v9b_text,encoding='utf-8')
+print('Uúba V9B assessment/referral language applied')
+
+
