@@ -851,4 +851,71 @@ _v10_index=_v10_index.replace('£14.99/month <span style="font-size:.56em;font-w
 _V10_INDEX.write_text(_v10_index,encoding='utf-8')
 print('Uúba V10 simple self-service and 20-document free limit installed')
 
+# ---- UUBA V11 QUIET HOME: SIMPLE FRONT DOOR; OPTIONAL FULL TOOLKIT ----
+from pathlib import Path as _V11Path
+_V11_ROOT=_V11Path('/app')
+_V11_HOME=_V11_ROOT/'index.html'
+_V11_START=_V11_ROOT/'start-case.html'
+_v11_html=_V11_HOME.read_text(encoding='utf-8')
+_v11_css=r'''<style id="uuba-v11-simple-style">
+body.uuba-v11-quiet{background:#f8fafc}
+body.uuba-v11-quiet main>section:not(#uuba-v11-entry){display:none!important}
+body.uuba-v11-quiet.uuba-v11-expanded main>section{display:block!important}
+body.uuba-v11-quiet .nav>a:not(.uuba-v11-link){display:none!important}
+body.uuba-v11-quiet.uuba-v11-expanded .nav>a{display:inline-flex!important}
+body.uuba-v11-quiet .top{box-shadow:none;border-bottom:1px solid #edf0f4}
+body.uuba-v11-quiet .topin{align-items:center;max-width:1140px}
+body.uuba-v11-quiet .nav{gap:15px;align-items:center}
+body.uuba-v11-quiet .nav .uuba-v11-link{font-size:14px;background:transparent;border:0;box-shadow:none;color:#334155;padding:8px}
+body.uuba-v11-quiet .nav .uuba-v11-primary{background:#123b79;color:white;border-radius:9px;padding:11px 17px}
+body.uuba-v11-quiet .nav #uuba-v11-tools{border:0;background:transparent;color:#345074;padding:8px 10px;cursor:pointer;font-weight:700}
+#uuba-v11-entry{max-width:860px;margin:0 auto;padding:80px 18px 100px;min-height:560px;text-align:center}
+#uuba-v11-entry .v11-kicker{font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:750;color:#3873a2}
+#uuba-v11-entry h1{font-size:clamp(34px,5vw,62px);line-height:1.08;letter-spacing:-.04em;color:#102441;margin:18px auto 14px;max-width:820px}
+#uuba-v11-entry .v11-sub{font-size:18px;line-height:1.55;color:#536176;margin:0 auto 32px;max-width:620px}
+#uuba-v11-entry .v11-entry-form{background:#fff;border:1px solid #dbe2eb;border-radius:18px;padding:14px;box-shadow:0 15px 40px rgba(22,44,83,.07);text-align:left;max-width:740px;margin:0 auto}
+#uuba-v11-entry textarea{font:inherit;width:100%;box-sizing:border-box;min-height:124px;resize:vertical;border:0;outline:none;padding:14px;color:#17253d;font-size:16px;background:#fff}
+#uuba-v11-entry .v11-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #edf0f4;padding:12px 6px 0}
+#uuba-v11-entry .v11-actions small{font-size:12px;color:#718096}
+#uuba-v11-entry button[type=submit]{background:#123b79;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-size:15px;font-weight:750;cursor:pointer}
+#uuba-v11-entry .v11-foot{margin-top:22px;color:#64748b;font-size:14px}
+#uuba-v11-entry .v11-foot a{color:#174b86}
+body.uuba-v11-quiet:not(.uuba-v11-expanded) footer{margin-top:0}
+@media(max-width:700px){#uuba-v11-entry{padding:48px 14px 70px;min-height:440px}#uuba-v11-entry .v11-actions{flex-direction:column;align-items:stretch}#uuba-v11-entry button[type=submit]{width:100%}body.uuba-v11-quiet .nav .uuba-v11-link:not(.uuba-v11-primary){display:none}body.uuba-v11-quiet .nav{gap:3px}body.uuba-v11-quiet .nav #uuba-v11-tools{font-size:12px}}
+</style>'''
+_v11_entry=r'''<section id="uuba-v11-entry" aria-label="Start your complaint">
+<p class="v11-kicker">A simpler way to handle a complaint</p>
+<h1>Have a complaint?<br>Tell Uúba what happened.</h1>
+<p class="v11-sub">We'll help organise your case, identify what's missing and suggest your next steps. Start free.</p>
+<form class="v11-entry-form" id="uuba-v11-form">
+<label for="uuba-v11-complaint" style="display:block;font-weight:700;font-size:14px;padding:8px 14px;color:#44546b">What happened?</label>
+<textarea id="uuba-v11-complaint" minlength="15" maxlength="20000" required placeholder="For example: My new-build home has heating problems and the developer hasn't resolved them..."></textarea>
+<div class="v11-actions"><small>Private case workspace · Up to 20 documents on Core</small><button type="submit">Get started free →</button></div>
+</form><p class="v11-foot">Already have an account? <a href="/start">Continue your case</a> · <a href="#plans" id="uuba-v11-pricing">See plans</a></p>
+</section>'''
+_v11_script=r'''<script id="uuba-v11-simple-script">
+(function(){function ready(){
+ document.body.classList.add('uuba-v11-quiet');
+ var form=document.getElementById('uuba-v11-form');
+ if(form)form.addEventListener('submit',function(event){event.preventDefault();var val=document.getElementById('uuba-v11-complaint').value.trim();if(val.length<15){document.getElementById('uuba-v11-complaint').focus();return;}try{sessionStorage.setItem('uubaDraftComplaint',val)}catch(e){}window.location.href='/start';});
+ var nav=document.querySelector('nav.nav');
+ if(nav){var a=document.createElement('a');a.href='/start';a.className='uuba-v11-link uuba-v11-primary';a.textContent='Start free';nav.insertBefore(a,nav.firstChild);var c=document.createElement('a');c.href='#cases';c.className='uuba-v11-link';c.textContent='My cases';nav.insertBefore(c,a);var m=document.createElement('button');m.id='uuba-v11-tools';m.type='button';m.textContent='All tools +';nav.appendChild(m);m.addEventListener('click',function(){var expanded=document.body.classList.toggle('uuba-v11-expanded');m.textContent=expanded?'Hide tools −':'All tools +';});}
+ function openForHash(){if(location.hash&&location.hash!=='#home'){document.body.classList.add('uuba-v11-expanded');var t=document.getElementById('uuba-v11-tools');if(t)t.textContent='Hide tools −';}}
+ window.addEventListener('hashchange',openForHash);openForHash();
+ var pricing=document.getElementById('uuba-v11-pricing');if(pricing)pricing.addEventListener('click',function(){document.body.classList.add('uuba-v11-expanded');});
+}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',ready)}else ready();})();
+</script>'''
+if 'id="uuba-v11-entry"' not in _v11_html:
+    _v11_html=_v11_html.replace('<main>','<main>'+_v11_entry,1)
+    _v11_html=_v11_html.replace('</head>',_v11_css+'</head>',1)
+    _v11_html=_v11_html.replace('</body>',_v11_script+'</body>',1)
+    _V11_HOME.write_text(_v11_html,encoding='utf-8')
+_v11_start=_V11_START.read_text(encoding='utf-8')
+if 'id="uuba-v11-draft-prefill"' not in _v11_start:
+    _v11_prefill=r'''<script id="uuba-v11-draft-prefill">
+(function(){function prefill(){try{var draft=sessionStorage.getItem('uubaDraftComplaint');var input=document.getElementById('facts');if(draft&&input&&!input.value){input.value=draft;sessionStorage.removeItem('uubaDraftComplaint')}}catch(e){}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',prefill);else prefill();})();
+</script>'''
+    _v11_start=_v11_start.replace('</body>',_v11_prefill+'</body>',1)
+    _V11_START.write_text(_v11_start,encoding='utf-8')
+print('Uúba V11 quiet homepage applied; toolkit preserved behind All tools')
 
