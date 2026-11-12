@@ -1000,3 +1000,46 @@ if 'UUBA V14 KEEP THE FULL ORIGINAL TOOLKIT' not in _v14text:
     _v14app.write_text(_v14text+'\n'+_v14api,encoding='utf-8')
 print('Uúba V14: clean homepage and direct on-page case organisation installed')
 
+
+# ---- UUBA V15: KEEP AUTHENTICATION IN THE SIMPLE CUSTOMER JOURNEY ----
+from pathlib import Path as _V15Path
+_V15ROOT=_V15Path('/app')
+_V15INDEX=_V15ROOT/'index.html'
+_V15START=_V15ROOT/'start-case.html'
+_V15APP=_V15ROOT/'app.py'
+_V15ACCOUNT=_V15ROOT/'account.html'
+_V15ACCOUNT_HTML=r'''<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in or create an account | Uúba</title>
+<style>:root{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#17324d;background:#fafcfe}*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #e5ebf0;background:white}nav{max-width:920px;margin:auto;padding:18px 20px;display:flex;justify-content:space-between;align-items:center}nav a{color:#115976;text-decoration:none}nav a.brand{font-weight:850;font-size:29px;letter-spacing:-1px}main{max-width:480px;margin:70px auto;padding:0 18px 70px}h1{font-size:35px;letter-spacing:-1px;margin:0 0 9px}p{color:#5c6e7a;line-height:1.55}section{background:white;border:1px solid #dce7ed;border-radius:18px;box-shadow:0 13px 37px #102b460b;padding:27px;margin-top:24px}.tabs{display:flex;gap:8px;margin-bottom:20px}.tabs button{flex:1;background:#edf4f7;color:#31566a}.tabs button.active{background:#11518c;color:white}label{display:block;font-weight:700;font-size:14px;margin:14px 0 7px}input:not([type=checkbox]){width:100%;padding:13px 12px;border:1px solid #cbd8df;border-radius:10px;font:inherit}button{border:0;padding:12px 16px;border-radius:10px;background:#11518c;color:white;font-weight:750;font-size:15px;cursor:pointer}button.action{width:100%;margin-top:20px;padding:14px}button:disabled{opacity:.5}.check{display:flex;gap:9px;align-items:flex-start;margin-top:15px;font-size:13px;line-height:1.5}.check input{margin-top:3px}.check a{color:#0b6b79}.hidden{display:none!important}.msg{min-height:25px;font-size:14px;color:#974147;margin-top:16px}small{color:#667887}.privacy{font-size:12px;color:#718292;margin-top:15px}@media(max-width:560px){main{margin-top:35px}section{padding:20px}}</style></head><body>
+<header><nav><a class="brand" href="/">Uúba</a><a href="/">Back to my complaint</a></nav></header><main><h1>Welcome to Uúba</h1><p>Your complaint stays in the same simple workspace. Sign in or create a free account to save it.</p>
+<section><div class="tabs"><button type="button" id="tab-login" class="active">Sign in</button><button type="button" id="tab-register">Create account</button></div>
+<form id="login"><label for="li-email">Email address</label><input id="li-email" type="email" autocomplete="email" required><label for="li-password">Password</label><input id="li-password" type="password" autocomplete="current-password" required><button class="action" type="submit">Sign in and continue</button></form>
+<form id="register" class="hidden"><label for="rg-name">Your name</label><input id="rg-name" maxlength="100" autocomplete="name" required><label for="rg-email">Email address</label><input id="rg-email" type="email" autocomplete="email" required><label for="rg-password">Create a password</label><input id="rg-password" type="password" minlength="10" autocomplete="new-password" required><small>At least 10 characters.</small><div id="beta-row" class="hidden"><label for="rg-code">Private beta access code</label><input id="rg-code" autocomplete="off" placeholder="Only if required by Uúba"></div>
+<label class="check"><input id="rg-terms" type="checkbox" required><span>I agree to the <a href="/tools#terms" target="_blank" rel="noopener">Terms of Use</a> and have read the <a href="/tools#privacy" target="_blank" rel="noopener">Privacy Notice</a>.</span></label>
+<label class="check"><input id="rg-marketing" type="checkbox"><span>Optional: I agree to receive Uúba updates and marketing.</span></label><button class="action" type="submit">Create free account and continue</button></form>
+<div class="msg" id="status" role="status"></div><div class="privacy">Your complaint text is kept in this browser tab while you sign in. No need to type it again.</div></section></main>
+<script>
+(function(){'use strict';const el=id=>document.getElementById(id);let mode='login';function switchTo(m){mode=m;el('login').classList.toggle('hidden',m!=='login');el('register').classList.toggle('hidden',m!=='register');el('tab-login').classList.toggle('active',m==='login');el('tab-register').classList.toggle('active',m==='register');el('status').textContent=''}
+el('tab-login').onclick=()=>switchTo('login');el('tab-register').onclick=()=>switchTo('register');if(location.hash==='#register')switchTo('register');
+async function send(path,payload,form){let btn=form.querySelector('button[type=submit]');btn.disabled=true;el('status').textContent='';try{const response=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});let d=await response.json().catch(()=>({}));if(!response.ok)throw Error(typeof d.detail==='string'?d.detail:'Unable to continue. Please check your details.');location.replace('/');}catch(e){el('status').textContent=e.message}finally{btn.disabled=false}}
+el('login').onsubmit=e=>{e.preventDefault();send('/api/auth/login',{email:el('li-email').value.trim(),password:el('li-password').value},el('login'))};
+el('register').onsubmit=e=>{e.preventDefault();send('/api/auth/register',{name:el('rg-name').value.trim(),email:el('rg-email').value.trim(),password:el('rg-password').value,accept_terms:el('rg-terms').checked,marketing_consent:el('rg-marketing').checked,access_code:el('rg-code').value.trim()},el('register'))};
+fetch('/api/health',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(d.private_beta)el('beta-row').classList.remove('hidden')}).catch(()=>{});
+})();
+</script></body></html>'''
+_V15ACCOUNT.write_text(_V15ACCOUNT_HTML,encoding='utf-8')
+_v15_index=_V15INDEX.read_text(encoding='utf-8')
+_v15_index=_v15_index.replace('href="/tools#register"','href="/account"')
+_v15_index=_v15_index.replace('href="/tools#login"','href="/account"')
+_v15_index=_v15_index.replace("location.replace('/tools'+location.hash)","location.replace(location.hash==='#plans'?'/tools#plans':'/account'+(location.hash==='#register'?'#register':''))")
+_v15_index=_v15_index.replace('<a href="/start">My cases</a>','<a href="/start">My cases</a><a href="/account">Sign in</a>')
+_V15INDEX.write_text(_v15_index,encoding='utf-8')
+_v15_start=_V15START.read_text(encoding='utf-8')
+_v15_start=_v15_start.replace('href="/#register"','href="/account#register"').replace('href="/">sign in','href="/account">sign in')
+_V15START.write_text(_v15_start,encoding='utf-8')
+_v15_app=_V15APP.read_text(encoding='utf-8')
+if "# UUBA V15 CLEAN ACCOUNT ROUTE" not in _v15_app:
+    _v15_app+='''\n# UUBA V15 CLEAN ACCOUNT ROUTE\n@app.get('/account',response_class=HTMLResponse)\n@app.get('/account/',response_class=HTMLResponse)\ndef uuba_v15_simple_account():\n    return FileResponse(ROOT/'account.html',headers={'Cache-Control':'no-store'})\n'''
+_v15_app=_v15_app.replace('def root(): return FileResponse(ROOT/"index.html")','def root(): return FileResponse(ROOT/"index.html",headers={"Cache-Control":"no-store"})')
+_V15APP.write_text(_v15_app,encoding='utf-8')
+print('Uúba V15: simple account flow connected to home; legacy toolkit available only through All tools')
+
