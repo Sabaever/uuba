@@ -1127,3 +1127,69 @@ def uuba_v17_admin_hub(request:Request):
     _V17_APP.write_text(_v17_app,encoding='utf-8')
 print('Uúba V17: unified navigation + dedicated connected pages; existing APIs and cases retained')
 
+# ---- UUBA V18: VISIBLE NAVIGATION + REPAIR LEGACY TOOLKIT SCRIPT ----
+from pathlib import Path as _V18Path
+import re as _v18re
+_V18_ROOT=_V18Path('/app')
+_V18_NAV='<header id="uuba-app-nav" role="banner"><nav class="uuba-nav-inner" aria-label="Uúba main navigation"><a class="uuba-wordmark" href="/" aria-label="Uúba home">Uúba<span class="uuba-wordmark-dot">.</span></a><div class="uuba-nav-pages"><a href="/" data-uuba-nav="home">Home</a><a href="/start" data-uuba-nav="start">Start a case</a><a href="/cases" data-uuba-nav="cases">My Cases</a><a href="/journey" data-uuba-nav="journey">Journey</a><a href="/bundles" data-uuba-nav="bundles">Evidence & Bundles</a><a href="/guidance" data-uuba-nav="guidance">Guidance</a><a href="/pricing" data-uuba-nav="pricing">Plans</a><details class="uuba-more"><summary>More <span aria-hidden="true">⌄</span></summary><div class="uuba-more-menu"><a href="/evidence-response-analyser">Response Analyser</a><a href="/new-build-resolution">New Build Centre</a><a href="/specialists">Specialists</a><a href="/consumer-voices">Consumer Voices</a><a href="/case-review">Personal Case Review</a><a href="/support">Support</a></div></details></div><div class="uuba-nav-actions"><a class="uuba-nav-signin" href="/account">Account</a><a class="uuba-nav-cta" href="/#complaint">Ask Uúba</a></div></nav></header>'
+_V18_CSS='<style id="uuba-v18-navigation-style">\n#uuba-app-nav .uuba-nav-inner{max-width:1370px;gap:16px;padding:11px 18px}\n#uuba-app-nav .uuba-nav-pages{gap:16px;min-width:0;align-items:center}\n#uuba-app-nav .uuba-nav-pages>a{font-size:13px;line-height:1.4}\n#uuba-app-nav .uuba-nav-actions{gap:12px}\n#uuba-app-nav .uuba-nav-cta{padding:10px 12px;white-space:nowrap}\n#uuba-app-nav .uuba-more-menu{z-index:999999}\n@media(max-width:1120px){#uuba-app-nav .uuba-nav-inner{flex-wrap:wrap;gap:8px 14px}#uuba-app-nav .uuba-nav-pages{order:3;width:100%;flex:0 0 100%;overflow-x:auto;overflow-y:visible;padding:5px 0 7px;gap:24px}#uuba-app-nav .uuba-nav-actions{margin-left:auto}}\n@media(max-width:620px){#uuba-app-nav .uuba-nav-pages{gap:18px}#uuba-app-nav .uuba-nav-pages>a{font-size:13px}#uuba-app-nav .uuba-wordmark{font-size:24px!important}}\n</style>'
+_V18_JS='<script id="uuba-v18-navigation-script">(function(){try{var p=location.pathname.replace(/\\/$/, \'\')||\'/\';var pairs={\'/\':\'home\',\'/home\':\'home\',\'/start\':\'start\',\'/start-case\':\'start\',\'/cases\':\'cases\',\'/journey\':\'journey\',\'/bundles\':\'bundles\',\'/guidance\':\'guidance\',\'/pricing\':\'pricing\'};document.querySelectorAll(\'#uuba-app-nav [data-uuba-nav]\').forEach(function(a){a.removeAttribute(\'aria-current\');if(a.getAttribute(\'data-uuba-nav\')===pairs[p])a.setAttribute(\'aria-current\',\'page\')});}catch(e){}})();</script>'
+_V18_BUNDLES='<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Evidence & Case Bundles | Uúba</title><style>:root{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#19344d;background:#f8fbfc}*{box-sizing:border-box}body{margin:0}.u-v18-main{max-width:1080px;margin:auto;padding:58px 20px 85px}h1{font-size:clamp(32px,4vw,51px);letter-spacing:-.04em;margin:7px 0 15px}p{line-height:1.65;color:#526b7d}.u-v18-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:28px 0}.u-v18-card{border:1px solid #dce9ee;background:white;border-radius:16px;padding:25px}.u-v18-card h2{margin-top:0}.u-v18-button{display:inline-block;background:#115d83;border-radius:9px;padding:11px 15px;color:white;text-decoration:none;font-weight:700;margin:7px 8px 0 0}.u-v18-button.soft{color:#175f7b;background:#e7f4f7}select{min-width:280px;max-width:100%;padding:12px;border:1px solid #c4d4dc;border-radius:8px;font:inherit}.u-v18-meta{font-size:13px;color:#657b8e}.u-v18-sr-only{position:absolute;left:-99999px}@media(max-width:720px){.u-v18-grid{grid-template-columns:1fr}.u-v18-main{padding:35px 16px}}</style></head><body><main class="u-v18-main"><span class="u-v18-meta">MY CASE WORKSPACE</span><h1>Evidence & case bundles</h1><p>Keep the supporting files organised and produce a case summary you can download. Links to documents require sign-in; the PDF does not embed the source files.</p><div class="u-v18-card"><h2>Select a saved case</h2><p id="u-v18-status" role="status">Checking your saved cases…</p><label for="u-v18-case">Your case</label> <select id="u-v18-case" disabled><option value="">Choose a case</option></select><div id="u-v18-actions"></div></div><div class="u-v18-grid"><section class="u-v18-card"><h2>Basic PDF bundle · Free</h2><p>A case overview, main issues, actions and linked evidence index.</p></section><section class="u-v18-card"><h2>Comprehensive PDF bundle · Plus</h2><p>Additional issue-by-issue details, questions, chronology and escalation notes. Requires an active Plus subscription.</p><a href="/pricing">Compare plans</a></section></div><p class="u-v18-meta">The case record is customer-provided and has not been independently verified. Uploaded documents are not automatically analysed. Verify submission requirements and deadlines.</p></main><script id="uuba-v18-bundles-script">(async function(){var select=document.getElementById(\'u-v18-case\'),status=document.getElementById(\'u-v18-status\'),actions=document.getElementById(\'u-v18-actions\');function a(href,label){var n=document.createElement(\'a\');n.className=\'u-v18-button\';n.href=href;n.textContent=label;return n}function update(){actions.replaceChildren();var id=Number(select.value);if(!id)return;actions.append(a(\'/journey?case=\'+id,\'Open journey\'));actions.append(a(\'/api/journey/\'+id+\'/bundle.pdf?level=basic\',\'Download basic PDF\'));actions.append(a(\'/api/journey/\'+id+\'/bundle.pdf?level=comprehensive\',\'Download Plus PDF\'))}select.addEventListener(\'change\',update);try{var r=await fetch(\'/api/cases\',{credentials:\'same-origin\'});if(r.status===401){status.textContent=\'Sign in to access your saved cases.\';actions.append(a(\'/account\',\'Sign in\'));return}if(!r.ok)throw Error(\'Unable to load cases\');var d=await r.json();var cases=Array.isArray(d.cases)?d.cases:[];if(!cases.length){status.textContent=\'No saved cases yet.\';actions.append(a(\'/start\',\'Start a case\'));return}for(var c of cases){var id=Number(c.id);if(!Number.isSafeInteger(id)||id<1)continue;var o=document.createElement(\'option\');o.value=id;o.textContent=(c.organisation||c.business_name||c.category||\'Case\')+\' — #\'+id;select.append(o)}select.disabled=false;status.textContent=\'Select the case to prepare.\';var specified=Number(new URLSearchParams(location.search).get(\'case\'));if(specified&&cases.some(c=>Number(c.id)===specified))select.value=String(specified);else select.selectedIndex=1;update()}catch(e){status.textContent=\'Unable to load saved cases. Please try again.\'}})();</script></body></html>'
+# Replace only the shared navigation, preserving complete page content and all live APIs.
+for _v18_file in ('index.html','home.html','cases.html','start-case.html','resolution-journey.html','guidance.html','pricing.html','support.html','account.html','admin-hub.html','evidence-response-analyser.html','new-build-resolution.html','case-review.html','specialists.html','consumer-voices.html','admin.html','caseworker-admin.html'):
+    _v18_path=_V18_ROOT/_v18_file
+    if not _v18_path.is_file():continue
+    _v18_text=_v18_path.read_text(encoding='utf-8')
+    _v18_text,_v18_count=_v18re.subn(r'<header id="uuba-app-nav".*?</header>',lambda m:_V18_NAV,_v18_text,count=1,flags=_v18re.S|_v18re.I)
+    if _v18_count!=1:raise RuntimeError('Shared navigation missing from '+_v18_file)
+    _v18_text=_v18_text.replace('</head>',_V18_CSS+'</head>',1)
+    _v18_text=_v18_text.replace('</body>',_V18_JS+'</body>',1)
+    _v18_path.write_text(_v18_text,encoding='utf-8')
+# Create a dedicated, authenticated-data case bundle selection page.
+_v18_bundle_file=_V18_ROOT/'bundles.html'
+_v18_markup=_V18_BUNDLES.replace('</head>',_V17_CSS+_V18_CSS+'</head>',1).replace('<body>','<body>'+_V18_NAV,1)
+_v18_markup=_v18_markup.replace('</body>',_V17_SCRIPT+_V18_JS+'</body>',1)
+_v18_bundle_file.write_text(_v18_markup,encoding='utf-8')
+# Repair the legacy toolkit's broken script markup. The original large print-document
+# HTML template contains literal </script> tags which were intercepted by the
+# browser's HTML parser, exposing thousands of characters of Javascript as text.
+_v18_tools=_V18_ROOT/'full-tools.html'
+if _v18_tools.is_file():
+    _v18_html=_v18_tools.read_text(encoding='utf-8')
+    _v18_open=_v18_html.find('window.printGeneratedLetter=function(){')
+    _v18_close=_v18_html.find('`);w.document.close();w.print()}',_v18_open)
+    if _v18_open<0 or _v18_close<0:raise RuntimeError('Legacy print function not found')
+    _v18_end=_v18_close+len('`);w.document.close();w.print()}')
+    _v18_safe_print=(
+        "window.printGeneratedLetter=function(){"
+        "var title=document.getElementById('generatedLetterTitle')?.textContent||'Uúba letter';"
+        "var body=document.getElementById('generatedLetterBody')?.textContent||'';"
+        "if(!body)return;var w=window.open('','_blank');"
+        "if(!w){alert('Please allow pop-ups to print this letter.');return;}"
+        "var e=typeof escapeHelper==='function'?escapeHelper:function(x){return String(x).replace(/[&<>\"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'})[c]})};"
+        "w.document.open();w.document.write('<!doctype html><html><head><title>'+e(title)+'</title>'"
+        "+'<style>body{font:16px/1.65 Arial,sans-serif;max-width:800px;margin:36px auto;color:#182d43;white-space:pre-wrap}</style>'"
+        "+'</head><body><h1>'+e(title)+'</h1><div>'+e(body)+'</div></body></html>');"
+        "w.document.close();w.focus();w.print();};"
+    )
+    _v18_html=_v18_html[:_v18_open]+_v18_safe_print+_v18_html[_v18_end:]
+    _v18_html,_v18_navcount=_v18re.subn(r'<header id="uuba-app-nav".*?</header>',lambda m:_V18_NAV,_v18_html,count=1,flags=_v18re.S|_v18re.I)
+    if _v18_navcount!=1:raise RuntimeError('Legacy navigation not found')
+    _v18_html=_v18_html.replace('</head>',_V18_CSS+'</head>',1)
+    # Insert this navigation script immediately before the FINAL closing body tag,
+    # never inside an HTML template literal used by the old print feature.
+    # Legacy document already includes an outer navigation script. Do not inject
+    # another script into a closing-body string inside legacy JavaScript.
+    _v18_tools.write_text(_v18_html,encoding='utf-8')
+_V18_APP=_V18_ROOT/'app.py'
+_v18_app=_V18_APP.read_text(encoding='utf-8')
+if '# UUBA V18 BUNDLES ROUTE' not in _v18_app:
+    _v18_app+='''
+# UUBA V18 BUNDLES ROUTE
+@app.get('/bundles',response_class=HTMLResponse)
+def uuba_v18_bundles_page():
+    return FileResponse(ROOT/'bundles.html',headers={'Cache-Control':'no-store'})
+'''
+    _V18_APP.write_text(_v18_app,encoding='utf-8')
+print('Uúba V18: main tabs visible, evidence bundles page linked, legacy script repaired')
+
