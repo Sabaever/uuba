@@ -1050,6 +1050,10 @@ RUN python /tmp/uuba_launch_patch.py && rm /tmp/uuba_launch_patch.py
 COPY uuba_chat_first_patch.py /tmp/uuba_chat_first_patch.py
 RUN python /tmp/uuba_chat_first_patch.py && rm /tmp/uuba_chat_first_patch.py
 
+# Replace guided chat with a real multi-turn AI assistant
+COPY uuba_live_ai_chat_patch.py /tmp/uuba_live_ai_chat_patch.py
+RUN python /tmp/uuba_live_ai_chat_patch.py && rm /tmp/uuba_live_ai_chat_patch.py
+
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
     chown -R uuba:uuba /app
