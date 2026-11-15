@@ -1046,6 +1046,10 @@ PY
 COPY uuba_launch_patch.py /tmp/uuba_launch_patch.py
 RUN python /tmp/uuba_launch_patch.py && rm /tmp/uuba_launch_patch.py
 
+# Chat-first customer entry, using the existing authenticated case workflow
+COPY uuba_chat_first_patch.py /tmp/uuba_chat_first_patch.py
+RUN python /tmp/uuba_chat_first_patch.py && rm /tmp/uuba_chat_first_patch.py
+
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
     chown -R uuba:uuba /app
