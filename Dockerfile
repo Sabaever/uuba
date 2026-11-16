@@ -1054,6 +1054,10 @@ RUN python /tmp/uuba_chat_first_patch.py && rm /tmp/uuba_chat_first_patch.py
 COPY uuba_live_ai_chat_patch.py /tmp/uuba_live_ai_chat_patch.py
 RUN python /tmp/uuba_live_ai_chat_patch.py && rm /tmp/uuba_live_ai_chat_patch.py
 
+# No-cost security hardening: admin XSS fix, HTTP response headers
+COPY uuba_security_hardening_patch.py /tmp/uuba_security_hardening_patch.py
+RUN python /tmp/uuba_security_hardening_patch.py && rm /tmp/uuba_security_hardening_patch.py
+
 RUN mkdir -p /app/data/uploads /app/data/backups && \
     useradd --create-home --uid 10001 uuba && \
     chown -R uuba:uuba /app
