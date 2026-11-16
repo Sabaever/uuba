@@ -76,3 +76,63 @@ final = app_path.read_text(encoding='utf-8')
 ast.parse(final)
 assert tag in final
 print('Uúba security hardening OK: safe admin rendering and HTTP security headers')
+
+
+# Persist chatbot rate limits across app restarts using existing paid PostgreSQL.
+# This prevents bypass by restarting the free web worker; no extra service needed.
+api_rate = r'''
+# UUBA SHARED CHAT RATE LIMIT V1
+import hashlib as _SecHashlib, os as _SecOS, time as _SecTime
+from sqlalchemy import create_engine as _SecCreateEngine, text as _SecSql
+from fastapi import HTTPException as _SecError
+_SecDBUrl=_SecOS.environ.get("DATABASE_URL","").strip()
+if _SecDBUrl.startswith("postgres://"):
+    _SecDBUrl="postgresql://"+_SecDBUrl[len("postgres://"):]
+_SecRateEngine=_SecCreateEngine(_SecDBUrl,pool_pre_ping=True,pool_size=2,max_overflow=2) if _SecDBUrl else None
+_SecRateSchemaReady=False
+_SecLastPrune=0
+
+def _uuba_db_chat_rate(identity, maximum, window=3600):
+    global _SecRateSchemaReady, _SecLastPrune
+    if _SecRateEngine is None:
+        raise _SecError(503,"AI requests temporarily unavailable; please use the case tools.")
+    # UTC time windows; rate checks are atomic across workers.
+    now=int(_SecTime.time())
+    bucket=now//max(60,window)
+    digest=_SecHashlib.sha256(identity.encode("utf-8")).hexdigest()
+    try:
+        with _SecRateEngine.begin() as connection:
+            if not _SecRateSchemaReady:
+                connection.execute(_SecSql("""CREATE TABLE IF NOT EXISTS uuba_ai_rate_limit (
+                  identity_hash VARCHAR(64) NOT NULL,
+                  window_bucket BIGINT NOT NULL,
+                  requests INTEGER NOT NULL,
+                  PRIMARY KEY (identity_hash,window_bucket)
+                )"""))
+                _SecRateSchemaReady=True
+            if now-_SecLastPrune>3600:
+                connection.execute(_SecSql(
+                    "DELETE FROM uuba_ai_rate_limit WHERE window_bucket < :old"
+                ),{"old":bucket-48})
+                _SecLastPrune=now
+            count=connection.execute(_SecSql("""INSERT INTO uuba_ai_rate_limit(identity_hash,window_bucket,requests)
+                VALUES(:hash,:bucket,1)
+                ON CONFLICT(identity_hash,window_bucket)
+                DO UPDATE SET requests = uuba_ai_rate_limit.requests + 1
+                WHERE uuba_ai_rate_limit.requests < :max_requests
+                RETURNING requests"""),{"hash":digest,"bucket":bucket,"max_requests":maximum}).scalar()
+        if count is None:
+            raise _SecError(429,"Chat allowance reached. Please return later or use the existing case tools.")
+    except _SecError:
+        raise
+    except Exception:
+        raise _SecError(503,"The AI service is temporarily unavailable. Please use existing case tools.")
+
+# Original AI endpoint resolves this global when a new message arrives.
+_uca_rate=_uuba_db_chat_rate
+'''
+if '# UUBA SHARED CHAT RATE LIMIT V1' not in final:
+    final += '\n'+api_rate
+    ast.parse(final)
+    app_path.write_text(final,encoding='utf-8')
+print('Uúba persistent chatbot limits installed using existing PostgreSQL')
