@@ -149,3 +149,11 @@ page=page.replace('id="doc-list"></ul>','id="doc-list"></ul><p class="tiny muted
 start_page.write_text(page,encoding='utf-8')
 assert new in start_page.read_text(encoding='utf-8')
 print('Uúba final start-case document links verified')
+
+
+# Inspect packaged storage adapter implementations at build time. Only static
+# source is printed; no runtime values, credentials, filenames or customer data.
+tree=ast.parse(app_path.read_text(encoding='utf-8'))
+for node in tree.body:
+    if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and (node.name in ('write_blob','read_blob','delete_blob','save_blob','download_document','upload_document') or 'blob' in node.name):
+        print('UUBA STORAGE SOURCE '+node.name+': '+ast.unparse(node).replace('\n','\\n'))
