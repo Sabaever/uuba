@@ -66,7 +66,7 @@ async def _uuba_security_headers(request: _SecRequest, call_next):
     path = request.url.path
     if (path.startswith("/api/admin") or path.startswith("/api/cases") or
         path.startswith("/api/journey") or path.startswith("/api/case-review") or
-        path in ("/api/me", "/api/assistant/chat")):
+        path in ("/api/me", "/api/assistant/chat", "/start", "/start-case", "/cases", "/journey", "/start-case.html")):
         response.headers["Cache-Control"] = "no-store"
     return response
 '''
@@ -136,3 +136,16 @@ if '# UUBA SHARED CHAT RATE LIMIT V1' not in final:
     ast.parse(final)
     app_path.write_text(final,encoding='utf-8')
 print('Uúba persistent chatbot limits installed using existing PostgreSQL')
+
+# Final-build assertion and correction: the exact start-case page has a
+# clickable document filename AND an explicit download action.
+start_page=root/'start-case.html'
+page=start_page.read_text(encoding='utf-8')
+old="const name=document.createElement('span');name.textContent=String(x.name||'Document');li.appendChild(name);const id=Number(x.id);if(Number.isSafeInteger(id)&&id>0){const link=document.createElement('a');link.href='/api/documents/'+id+'/download';link.textContent='Download';link.style.marginLeft='12px';link.setAttribute('aria-label','Download '+name.textContent);li.appendChild(link);}else{li.appendChild(document.createTextNode(' — download unavailable'));}"
+new="const name=String(x.name||'Document');const id=Number(x.id);if(Number.isSafeInteger(id)&&id>0){const href='/api/documents/'+id+'/download';const title=document.createElement('a');title.href=href;title.textContent=name;title.style.textDecoration='underline';li.appendChild(title);const link=document.createElement('a');link.href=href;link.textContent='Download';link.style.marginLeft='12px';link.style.textDecoration='underline';link.setAttribute('aria-label','Download '+name);li.appendChild(link);}else{li.textContent=name+' — download unavailable';}"
+assert old in page, 'Expected updated document renderer missing from final build'
+page=page.replace(old,new,1)
+page=page.replace('id="doc-list"></ul>','id="doc-list"></ul><p class="tiny muted">Click a filename or Download to retrieve your saved evidence.</p>',1)
+start_page.write_text(page,encoding='utf-8')
+assert new in start_page.read_text(encoding='utf-8')
+print('Uúba final start-case document links verified')
