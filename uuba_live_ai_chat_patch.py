@@ -54,7 +54,8 @@ _UCA_INSTRUCTIONS = (
     'For emergency safety or imminent deadlines, urge prompt qualified assistance. '
     'You are not a solicitor or an ombudsman. Be useful, concise and interactive, not a static questionnaire. '
     'Avoid giving definitive legal advice on complex personal cases. '
-    'Do not push paid services unless the user explicitly asks.'
+    'Do not push paid services unless the user explicitly asks. '
+    'For a requested formal letter, prioritise a complete usable letter including the closing, and keep any commentary brief. Do not stop mid-sentence.'
 )
 
 @app.post('/api/assistant/chat')
@@ -68,10 +69,15 @@ async def uuba_live_ai_chat(request: _UcaRequest):
             origin_host=''
         if origin_host.lower()!=host:
             raise _UcaError(403,'Origin not allowed')
-    if request.headers.get('content-length','').isdigit() and int(request.headers['content-length'])>18000:
+    if request.headers.get('content-length','').isdigit() and int(request.headers['content-length'])>64000:
         raise _UcaError(413,'Message too large')
     try:
-        payload=await request.json()
+        raw=await request.body()
+        if len(raw)>64000:
+            raise _UcaError(413,'Message too large')
+        payload=_uca_json.loads(raw)
+    except _UcaError:
+        raise
     except Exception:
         raise _UcaError(400,'Invalid message')
     if not isinstance(payload,dict):
@@ -87,9 +93,11 @@ async def uuba_live_ai_chat(request: _UcaRequest):
         if not isinstance(entry,dict) or entry.get('role') not in ('user','assistant'):
             raise _UcaError(400,'Invalid conversation history')
         content=entry.get('content')
-        if not isinstance(content,str) or len(content)>3500:
+        if not isinstance(content,str) or len(content)>(10000 if entry['role']=='assistant' else 3500):
             raise _UcaError(400,'Invalid previous message')
         safe_history.append({'role':entry['role'],'content':content})
+    if sum(len(x['content']) for x in safe_history)>22000:
+        raise _UcaError(400,'Conversation history too long; start a new chat or save the case.')
     try:
         account=current_user(request)
     except Exception:
@@ -105,20 +113,21 @@ async def uuba_live_ai_chat(request: _UcaRequest):
     model=_uca_os.getenv('UUBA_CHAT_MODEL','').strip() or globals().get('OPENAI_MODEL','gpt-4.1-mini')
     data={'conversation':safe_history,'latest_user_message':current.strip(),
           'context':'UK consumer complaint information; no documents or saved cases supplied'}
+    draft_request=any(term in current.lower() for term in ('letter','draft','formal complaint','write a complaint','write an email'))
     def _respond():
         from openai import OpenAI
         client=OpenAI(api_key=key,timeout=35.0,max_retries=1)
         answer=client.responses.create(model=model,instructions=_UCA_INSTRUCTIONS,
-            input=_uca_json.dumps(data,ensure_ascii=False),store=False,max_output_tokens=850)
-        return (answer.output_text or '').strip()
+            input=_uca_json.dumps(data,ensure_ascii=False),store=False,max_output_tokens=2200 if draft_request else 850)
+        return (answer.output_text or '').strip(), getattr(answer,'status',None)=='incomplete'
     try:
-        reply=await _uca_asyncio.wait_for(_uca_asyncio.to_thread(_respond),timeout=48.0)
+        reply,incomplete=await _uca_asyncio.wait_for(_uca_asyncio.to_thread(_respond),timeout=48.0)
     except Exception:
         # Avoid exposing API-provider credentials, internal errors or billing details.
         raise _UcaError(503,'The AI assistant is temporarily unavailable. Please try again.')
     if not reply:
         raise _UcaError(503,'No reply was returned. Please try again.')
-    return _UcaJson({'reply':reply[:5000], 'mode':'ai',
+    return _UcaJson({'reply':reply, 'incomplete':incomplete, 'mode':'ai',
                      'saved':False, 'guest':not signed_in},
                      headers={'Cache-Control':'no-store'})
 '''
@@ -136,6 +145,9 @@ javascript = r'''<script id="uuba-chat-first-js">
     const send=document.getElementById('ucf-send');
     if(!form||!input||!historyBox||!original||!existing||!send)return;
     let conversation=[],working=false;
+    const chatStyle=document.createElement('style');
+    chatStyle.textContent='.ucf-bubble{white-space:pre-wrap;overflow-wrap:anywhere;flex-shrink:0}';
+    document.head.appendChild(chatStyle);
     const note=document.createElement('p');
     note.className='ucf-note';
     note.id='ucf-ai-status';
@@ -168,7 +180,8 @@ javascript = r'''<script id="uuba-chat-first-js">
       const message=input.value.trim();
       if(message.length<2){input.focus();return;}
       if(message.length>3500){note.textContent='Please shorten your message to 3500 characters.';return;}
-      const recent=conversation.slice(-12);
+      const recent=conversation.slice(-12).map(x=>({role:x.role,content:x.content.slice(0,x.role==='assistant'?10000:3500)}));
+      while(recent.reduce((n,x)=>n+x.content.length,0)>18000)recent.shift();
       bubble('user',message);
       input.value='';working=true;send.disabled=true;send.textContent='Thinking…';
       note.textContent='Uúba is considering your question…';
@@ -184,7 +197,7 @@ javascript = r'''<script id="uuba-chat-first-js">
         bubble('assistant',data.reply);
         conversation.push({role:'user',content:message},{role:'assistant',content:data.reply});
         if(conversation.length>24)conversation=conversation.slice(-24);
-        note.textContent='AI-generated guidance. Check important rights and deadlines with official sources. Your chat is not saved as a case.';
+        note.textContent=data.incomplete?'The AI reached its response limit. This answer is incomplete; ask Uúba to continue before using it.':'AI-generated guidance. Check important rights and deadlines with official sources. Your chat is not saved as a case.';
       }catch(err){
         bubble('assistant',err.message||'The assistant is unavailable. Please try again.');
         input.value=message;
