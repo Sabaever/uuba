@@ -151,9 +151,117 @@ assert new in start_page.read_text(encoding='utf-8')
 print('Uúba final start-case document links verified')
 
 
-# Inspect packaged storage adapter implementations at build time. Only static
-# source is printed; no runtime values, credentials, filenames or customer data.
+
+# Durable evidence storage for the existing PostgreSQL plan, avoiding the
+# ephemeral free web-service filesystem. Preserve configured S3 behaviour.
 tree=ast.parse(app_path.read_text(encoding='utf-8'))
-for node in tree.body:
-    if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and (node.name in ('write_blob','read_blob','delete_blob','save_blob','download_document','upload_document') or 'blob' in node.name):
-        print('UUBA STORAGE SOURCE '+node.name+': '+ast.unparse(node).replace('\n','\\n'))
+functions={n.name:n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+for name,params in (('store_blob',['key','encrypted_data']),('read_blob',['key']),('delete_blob',['key'])):
+    assert name in functions and [x.arg for x in functions[name].args.args]==params, 'Unexpected evidence storage adapter signature'
+assert 'fernet.encrypt(data)' in ast.unparse(functions['upload_document'])
+assert 'fernet.decrypt(read_blob' in ast.unparse(functions['download_document'])
+storage=r'''
+# UUBA DURABLE EVIDENCE V1
+import logging as _EvidenceLogging
+import secrets as _EvidenceSecrets
+from sqlalchemy import LargeBinary as _EvidenceBinary, bindparam as _EvidenceBind
+_EvidenceLegacyStore=store_blob
+_EvidenceLegacyRead=read_blob
+_EvidenceLegacyDelete=delete_blob
+_EvidenceLock=82730621
+_EvidenceBudget=200*1024*1024
+_EvidenceDBLimit=700*1024*1024
+
+def _evidence_schema(connection):
+    connection.execute(_SecSql("SELECT pg_advisory_xact_lock(:lock)"),{"lock":_EvidenceLock})
+    connection.execute(_SecSql("""CREATE TABLE IF NOT EXISTS uuba_evidence_blobs(
+        stored_key TEXT PRIMARY KEY,
+        encrypted_blob BYTEA NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )"""))
+
+def store_blob(key: str, encrypted_data: bytes):
+    if S3_BUCKET:
+        return _EvidenceLegacyStore(key,encrypted_data)
+    if _SecRateEngine is None:
+        raise _SecError(503,"Durable document storage is temporarily unavailable.")
+    try:
+        with _SecRateEngine.begin() as connection:
+            _evidence_schema(connection)
+            used=connection.execute(_SecSql("SELECT COALESCE(SUM(octet_length(encrypted_blob)),0) FROM uuba_evidence_blobs")).scalar()
+            dbsize=connection.execute(_SecSql("SELECT pg_database_size(current_database())")).scalar()
+            if int(used or 0)+len(encrypted_data)>_EvidenceBudget or int(dbsize or 0)+2*len(encrypted_data)>_EvidenceDBLimit:
+                raise _SecError(507,"Document storage is temporarily full. Keep your original file and contact support.")
+            connection.execute(_SecSql("INSERT INTO uuba_evidence_blobs(stored_key,encrypted_blob) VALUES(:key,:blob)").bindparams(_EvidenceBind("blob",type_=_EvidenceBinary())),{"key":key,"blob":encrypted_data})
+    except _SecError:
+        raise
+    except Exception:
+        _EvidenceLogging.getLogger("uuba.evidence").warning("Durable evidence write failed")
+        raise _SecError(503,"Document could not be stored securely. Please try again.")
+
+def read_blob(key: str) -> bytes:
+    if S3_BUCKET:
+        return _EvidenceLegacyRead(key)
+    if _SecRateEngine is None:
+        raise _SecError(503,"Document storage is temporarily unavailable.")
+    try:
+        with _SecRateEngine.begin() as connection:
+            _evidence_schema(connection)
+            value=connection.execute(_SecSql("SELECT encrypted_blob FROM uuba_evidence_blobs WHERE stored_key=:key"),{"key":key}).scalar()
+        if value is not None:
+            return bytes(value)
+    except Exception:
+        _EvidenceLogging.getLogger("uuba.evidence").warning("Durable evidence read failed")
+        raise _SecError(503,"Document storage is temporarily unavailable.")
+    try:
+        return _EvidenceLegacyRead(key)
+    except FileNotFoundError:
+        raise _SecError(410,"This earlier uploaded file is no longer available. Please re-upload your original copy.")
+
+def delete_blob(key: str):
+    if S3_BUCKET:
+        return _EvidenceLegacyDelete(key)
+    if _SecRateEngine is None:
+        raise _SecError(503,"Document storage is temporarily unavailable.")
+    try:
+        with _SecRateEngine.begin() as connection:
+            _evidence_schema(connection)
+            connection.execute(_SecSql("DELETE FROM uuba_evidence_blobs WHERE stored_key=:key"),{"key":key})
+        _EvidenceLegacyDelete(key)
+    except Exception:
+        _EvidenceLogging.getLogger("uuba.evidence").warning("Durable evidence deletion failed")
+        raise _SecError(503,"Document deletion could not be completed. Please try again.")
+
+@app.on_event("startup")
+def _uuba_evidence_storage_selftest():
+    if S3_BUCKET:
+        _EvidenceLogging.getLogger("uvicorn.error").info("Uuba evidence storage uses configured S3; database storage self-test skipped")
+        return
+    if _SecRateEngine is None:
+        _EvidenceLogging.getLogger("uvicorn.error").warning("Uuba durable evidence storage unavailable")
+        return
+    # Test the real adapters with a synthetic encrypted payload, never customer
+    # files. Delete the synthetic row immediately after checking round-trip.
+    key="__uuba_selftest__/"+_EvidenceSecrets.token_hex(16)
+    sample=b"Uuba durable evidence storage self-test"
+    stored=False
+    try:
+        store_blob(key,fernet.encrypt(sample))
+        stored=True
+        assert fernet.decrypt(read_blob(key))==sample
+        delete_blob(key)
+        stored=False
+        _EvidenceLogging.getLogger("uvicorn.error").info("Uuba durable evidence storage self-test PASSED: encrypted write/read/delete")
+    except Exception:
+        _EvidenceLogging.getLogger("uvicorn.error").warning("Uuba durable evidence storage self-test FAILED")
+    finally:
+        if stored:
+            try: delete_blob(key)
+            except Exception: pass
+'''
+current=app_path.read_text(encoding='utf-8')
+assert '# UUBA DURABLE EVIDENCE V1' not in current
+current+='\n'+storage
+ast.parse(current)
+app_path.write_text(current,encoding='utf-8')
+print('Uuba durable encrypted PostgreSQL evidence storage installed; existing owner checks preserved')
